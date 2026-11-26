@@ -269,8 +269,11 @@ A page is data, but it still touches six places. This is the whole list, in orde
 6. **Swipe (only if it has a category strip):** `ui_list_set_gesture_cb()` on the built page
    with a handler that cycles its categories — see `chat_gesture`/`menu_gesture`.
 
-Appearance needs no work: colours come from `ui_palette()`, sizes from the `UI_*` tokens,
-so a new page matches the others automatically.
+Appearance needs no work: colours come from `ui_color(role)` (nine roles, one table per
+theme in `ui/ui_theme.c` — never a literal, `just check-colours` enforces it) and text
+from the three role faces (`ui_font_title/body_l/body_m` = Headers/Text/Subtext, adjustable
+in Settings > Display). A new page matches the others automatically; the appearance apply
+pass (`ui_appearance_on_apply`) restyles it on a theme or font change with no extra code.
 
 ## 11. Porting to the S3 — the budget to keep
 

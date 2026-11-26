@@ -121,7 +121,7 @@ typedef struct { uint8_t face; uint8_t px; } font_step_t;
 
 static const font_step_t g_ladder[UI_FONT_ROLE_COUNT][6] = {
     [UI_FONT_HEADER] = {
-        { UI_FACE_SILKSCREEN, 24 },   /* shipped                         */
+        { UI_FACE_SILKSCREEN, UI_FONT_TITLE_PX },   /* shipped            */
         { UI_FACE_SILKSCREEN, 32 },
         { UI_FACE_VT323,      32 },
         { UI_FACE_JERSEY,     32 },
@@ -129,7 +129,7 @@ static const font_step_t g_ladder[UI_FONT_ROLE_COUNT][6] = {
         { UI_FACE_PIXELIFY,   32 },
     },
     [UI_FONT_TEXT] = {
-        { UI_FACE_VT323,      24 },   /* shipped                         */
+        { UI_FACE_VT323,      UI_FONT_BODY_L_PX },  /* shipped            */
         { UI_FACE_VT323,      20 },
         { UI_FACE_VT323,      28 },
         { UI_FACE_JERSEY,     24 },
@@ -137,7 +137,7 @@ static const font_step_t g_ladder[UI_FONT_ROLE_COUNT][6] = {
         { UI_FACE_SILKSCREEN, 24 },
     },
     [UI_FONT_SUBTEXT] = {
-        { UI_FACE_PIXELIFY,   16 },   /* shipped (baked 8bpp)            */
+        { UI_FACE_PIXELIFY,   UI_FONT_BODY_M_PX },  /* shipped (baked)    */
         { UI_FACE_PIXELIFY,   20 },
         { UI_FACE_VT323,      16 },
         { UI_FACE_JERSEY,     16 },
