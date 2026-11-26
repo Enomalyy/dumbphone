@@ -16,7 +16,8 @@ that relays modern apps (WhatsApp, Mail, Maps, banking) to a thin client.
   shared `ui_row_style()` row paint), `ui_keymap` per-page actions, `ui_theme` palette + ALL
   design tokens (fonts/metrics), `ui_options` the SHOULDER-L sidebar tables, `ui_sidebar` the
   options overlay, `ui_settings` / `ui_speeddial` / `ui_heldpress` / `ui_calls` page data,
-  `ui_home` the chat list, `ui_mainmenu` the carousel, `ui_leaf` lock + stub pages,
+  `ui_home` the real HOME screen (wallpaper + widget row), `ui_messaging` the chat list,
+  `ui_mainmenu` the carousel, `ui_leaf` lock + stub pages,
   `ui_input` the HAL event pump, `ui_shell.c` the frame + screen stack + key dispatcher;
   `host/` = SDL2 backends for `hal_display`/`hal_input` plus stubs, `just
   build-desktop|run-desktop|shot-desktop|shot-window`. `host/src/bezel.c` holds the simulated
@@ -47,11 +48,14 @@ that relays modern apps (WhatsApp, Mail, Maps, banking) to a thin client.
 
 Status (26/11): concept phase + **Phase 1 harness** (ESP-IDF v5.5.6, QEMU boots the scaffold).
   **Tier-1 simulator has a complete, navigable UI** (overnight 10-leg relay `relay/menu-rebuild/`,
-  commits `53b22a99..ce3a9d21`): HOME chat list from real WAHA data with a 5-way category strip,
-  main menu as a 4-category carousel + grid alternative, Settings tree with working toggles,
-  Speed Dials + Held Presses config, Calls (Call History, Contacts), SHOULDER-L options sidebar,
-  touch taps/swipes, lock screen. Every page is a `menu_t` on one renderer; all shared metrics and
-  font sizes are tokens in `ui/ui_theme.h`.
+  commits `53b22a99..ce3a9d21`): a dedicated HOME screen (flat wallpaper + DATE/UNREAD/BATTERY
+  widgets), the Messaging chat list from real WAHA data with a 5-way category strip, main menu as
+  a 4-category carousel + grid alternative, Settings tree with working toggles, Speed Dials +
+  Held Presses config, Calls (Call History, Contacts), SHOULDER-L options sidebar, touch
+  taps/swipes, lock screen, and a contextual softkey legend for the physical keys. Navigation:
+  `LOCK ↦ HOME ↦ menu ↦ category ↦ page` — END returns to HOME from anywhere, END×2 on HOME locks.
+  Every list page is a `menu_t` on one renderer; all shared metrics and
+  font sizes are tokens in `ui/ui_theme.h`. Spec §12 (HOME split + softkey legend) is BUILT.
   Run it: `just run-desktop` (window + tailnet browser viewport) · `just shot-desktop <screen>`
   (golden frame, clock frozen) · `just build-s3`.
   Next: the out-of-scope follow-ups recorded in `relay/menu-rebuild/status.md` — PIN entry, real

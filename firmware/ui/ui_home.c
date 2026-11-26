@@ -1,229 +1,138 @@
 /*
- * ui_home.c — HOME screen: the unified WhatsApp chat list (spec §2).
+ * ui_home.c — HOME screen (spec §2): wallpaper + honest widgets.
  *
- * Owns: the chat data adapter (the target's chat source resolved into
- * per-category item slices), the page's menu_t + its contextual keymap, and
- * the category cycling. Exposes: ui_home_build / ui_home_page /
- * ui_home_keymap / ui_home_cycle_cat (ui_home.h). Must not touch: navigation
- * state, the screen stack, key routing — those live in ui_shell.c; appearance
- * in ui_theme.h + ui_menu.c.
+ * HOME is its own screen, reached from LOCK and returned to by END from
+ * anywhere; CENTER opens the MAIN MENU from here. It is deliberately NOT a
+ * menu_t page: a flat pixel-art background motif (one dim phone glyph — no
+ * photos, no gradients), one row of working widgets fed only by data the
+ * shell already has (date from the status-bar clock, unread total from the
+ * chat source, battery from the shell's single value — the status bar's
+ * clock is not duplicated here), and a key affordance line.
+ *
+ * Owns: the home root object + widgets, its keymap. Exposes:
+ * ui_home_build / ui_home_root / ui_home_keymap / ui_home_set_date
+ * (ui_home.h). Must not touch: the navigation stack, the status/softkey
+ * bars, any other screen.
  */
 
-#include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "lvgl.h"
 
-#include "chat_model.h"
 #include "ui_icons.h"
 #include "ui_keymap.h"
-#include "ui_menu.h"
-#include "ui_home.h"
+#include "ui_messaging.h"  /* ui_messaging_unread_total() */
+#include "ui_shell.h"      /* ui_shell_battery_pct()      */
+#include "ui_theme.h"
 
-#define CHAT_N_CATS     5
-#define CHAT_POOL_CAT   (UI_CHAT_MAX + 1)   /* per-category slice size */
+static lv_obj_t *g_root;
+static lv_obj_t *g_date_val;    /* widget value labels (updated at runtime) */
+static lv_obj_t *g_unread_val;
 
-static const menu_cat_t g_chat_cats[] = {
-    { "ALL",       I_INBOX   },
-    { "FAMILY",    I_USERS   },
-    { "UNREAD",    I_BOLT    },
-    { "FAVORITES", I_HEART   },
-    { "ARCHIVED",  I_ARCHIVE },
-};
-
-/* Shared row text store: one entry per chat, shared by every category
- * slice that contains it (no duplicated strings). The last three slots
- * hold the special rows (No chats / New Chat / Archived). */
-typedef struct {
-    char name[64];
-    char prev[136];
-    char time[8];
-} chat_text_t;
-
-static chat_text_t g_chat_text[UI_CHAT_MAX + 3];
-static menu_item_t g_chat_items[CHAT_N_CATS * CHAT_POOL_CAT];
-
-static int chat_cat_off[CHAT_N_CATS];   /* pool offset per category  */
-static int chat_cat_n[CHAT_N_CATS];     /* item count per category   */
-
-/* The page this module owns. */
-static list_page_t *g_chat;
-
-/* HOME is the chat list: d-pad L/R cycles its category strip (spec §2
- * LIST pages), up/down moves the row selection, CENTER opens the MAIN MENU,
- * T9 keys 1..9 are speed dials (empty slots are inert — the handler checks
- * ui_speeddial_set()). */
+/* HOME's contextual keymap (spec §2/§4): CENTER opens the MAIN MENU,
+ * T9 1-9 are speed dials, CALL goes straight to Calls. Nothing behind
+ * SHOULDER-R — there is no previous page from HOME. */
 static const keymap_t km_home = {
-    .shoulder_l = ACT_OPEN_OPTIONS, /* options sidebar (spec §1)     */
-    .shoulder_r = ACT_NOOP,        /* nothing behind HOME             */
-    .center     = ACT_ACTIVATE,    /* CENTER opens the MAIN MENU      */
-    .call       = ACT_CALL_APP,    /* jump to the Calls category      */
-    .end        = ACT_NOOP,        /* already home; 2nd END locks (the
-                                      shell's lock state machine)     */
-    .up         = ACT_MOVE_SEL_UP,
-    .down       = ACT_MOVE_SEL_DOWN,
-    .left       = ACT_CYCLE_CAT_PREV,   /* previous chat category     */
-    .right      = ACT_CYCLE_CAT_NEXT,   /* next chat category         */
+    .shoulder_l = ACT_OPEN_OPTIONS,
+    .shoulder_r = ACT_NOOP,
+    .center     = ACT_ACTIVATE,   /* opens the MAIN MENU (shell) */
+    .call       = ACT_CALL_APP,   /* straight to Call History    */
+    .end        = ACT_NOOP,       /* already home; 2nd END locks (shell state machine) */
     .t9         = { ACT_DIAL, ACT_DIAL, ACT_DIAL, ACT_DIAL, ACT_DIAL,
                     ACT_DIAL, ACT_DIAL, ACT_DIAL, ACT_DIAL,
                     ACT_NOOP, ACT_NOOP, ACT_NOOP },
-};   /* T9: keys 1..9 are speed dials; 0, star, hash are inert. */
-
-/* The chat list page: strip populated, items repointed on cycle. */
-static menu_t g_chat_m = {
-    .title   = "CHATS",
-    .items   = NULL,      /* set by build_chat_items()            */
-    .n_items = 0,
-    .sel     = 0,
-    .cats    = g_chat_cats,
-    .n_cats  = CHAT_N_CATS,
-    .cat_sel = 0,
-    .keys    = km_home,
 };
 
-/* Append one row to category `cat`'s slice, pointing at shared text slot
- * `tidx`. A full slice drops the overflow (the source is capped anyway). */
-static void add_chat_item(int cat, const ui_chat_t *c, int tidx)
+/* One widget card: a flat bordered box with a small label over a value.
+ * The value label is returned so the caller can update it at runtime. */
+static lv_obj_t *widget_card(lv_obj_t *parent, int x, const char *label,
+                             const char *value)
 {
-    if (chat_cat_n[cat] >= CHAT_POOL_CAT) {
-        return;
-    }
-    int i = chat_cat_off[cat] + chat_cat_n[cat]++;
-    menu_item_t *it = &g_chat_items[i];
-    it->label  = g_chat_text[tidx].name;
-    it->sub    = g_chat_text[tidx].prev;
-    it->icon   = c ? (c->group ? I_USERS : I_USER) : I_ENVELOPE;
-    it->meta   = g_chat_text[tidx].time;
-    it->badge  = c ? (int)c->unread : 0;
-    it->target = PAGE_NONE;   /* opening a conversation: later leg */
+    const ui_palette_t *pal = ui_palette();
+
+    lv_obj_t *card = lv_obj_create(parent);
+    lv_obj_set_size(card, UI_HOME_CARD_W, UI_HOME_WIDGET_H);
+    lv_obj_set_pos(card, x, UI_HOME_WIDGET_Y);
+    lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(card, pal->bg, 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(card, pal->border, 0);
+    lv_obj_set_style_border_width(card, 2, 0);
+    lv_obj_set_style_radius(card, 0, 0);
+
+    lv_obj_t *lbl = lv_label_create(card);
+    lv_label_set_text(lbl, label);
+    lv_obj_set_style_text_font(lbl, ui_font_chrome_s(), 0);
+    lv_obj_set_style_text_color(lbl, pal->text_dim, 0);
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_remove_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(lbl, LV_ALIGN_TOP_MID, 0, 6);
+
+    lv_obj_t *val = lv_label_create(card);
+    lv_label_set_text(val, value);
+    lv_obj_set_style_text_font(val, ui_font_body_m(), 0);
+    lv_obj_set_style_text_color(val, pal->text, 0);
+    lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_remove_flag(val, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(val, LV_ALIGN_TOP_MID, 0, 28);
+
+    return val;
 }
 
-/* Resolve the chat source into per-category item slices. ALL gets every
- * chat plus a trailing New Chat row; ARCHIVED is one summary row. */
-static void build_chat_items(void)
+lv_obj_t *ui_home_build(lv_obj_t *parent)
 {
-    memset(g_chat_items, 0, sizeof g_chat_items);
-    for (int c = 0; c < CHAT_N_CATS; c++) {
-        chat_cat_off[c] = 0;
-        chat_cat_n[c] = 0;
-    }
+    const ui_palette_t *pal = ui_palette();
+    char buf[16];
 
-    ui_chat_list_t list;
-    if (ui_chat_source_load(&list) != 0) {
-        /* No data: one honest row in ALL instead of invented chats. */
-        snprintf(g_chat_text[UI_CHAT_MAX].name, sizeof g_chat_text[0].name,
-                 "No chats");
-        snprintf(g_chat_text[UI_CHAT_MAX].prev, sizeof g_chat_text[0].prev,
-                 "source unavailable");
-        add_chat_item(0, NULL, UI_CHAT_MAX);
-        g_chat_items[chat_cat_off[0]].icon = I_INBOX;
-    } else {
-        /* Pass 1: count rows per category (capped at the slice size). */
-        for (int i = 0; i < list.count; i++) {
-            const ui_chat_t *c = &list.chats[i];
-            if (chat_cat_n[0] < CHAT_POOL_CAT) chat_cat_n[0]++;   /* ALL    */
-            if (c->family && chat_cat_n[1] < CHAT_POOL_CAT) chat_cat_n[1]++;
-            if (c->unread && chat_cat_n[2] < CHAT_POOL_CAT) chat_cat_n[2]++;
-            if (c->favorite && chat_cat_n[3] < CHAT_POOL_CAT) chat_cat_n[3]++;
-        }
-        if (chat_cat_n[0] < CHAT_POOL_CAT) chat_cat_n[0] += 1;    /* New Chat */
-        int has_archived = (list.archived_count > 0);             /* ARCHIVED */
-        chat_cat_n[4] = has_archived ? 1 : 0;
+    g_root = lv_obj_create(parent);
+    lv_obj_set_size(g_root, UI_PANEL_W, UI_CONTENT_H);
+    lv_obj_set_pos(g_root, 0, 0);
+    lv_obj_remove_flag(g_root, LV_OBJ_FLAG_SCROLLABLE);
+    /* The wallpaper base is the flat panel bg — no gradient, no image. */
+    lv_obj_set_style_bg_color(g_root, pal->bg, 0);
+    lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
 
-        /* Pass 2: fix the offsets, then fill. add_chat_item() advances
-         * chat_cat_n as it writes, so zero the counters first — pass 1's
-         * counts have served their purpose (the offsets are now frozen). */
-        int off = 0;
-        for (int c = 0; c < CHAT_N_CATS; c++) {
-            chat_cat_off[c] = off;
-            off += chat_cat_n[c];
-        }
-        memset(chat_cat_n, 0, sizeof chat_cat_n);
-        for (int i = 0; i < list.count; i++) {
-            const ui_chat_t *c = &list.chats[i];
-            snprintf(g_chat_text[i].name, sizeof g_chat_text[i].name,
-                     "%s", c->name);
-            if (c->mine && c->last[0]) {
-                snprintf(g_chat_text[i].prev, sizeof g_chat_text[i].prev,
-                         "You: %s", c->last);
-            } else {
-                snprintf(g_chat_text[i].prev, sizeof g_chat_text[i].prev,
-                         "%s", c->last);
-            }
-            snprintf(g_chat_text[i].time, sizeof g_chat_text[i].time,
-                     "%s", c->time);
-            add_chat_item(0, c, i);                       /* ALL              */
-            if (c->family)   add_chat_item(1, c, i);      /* FAMILY           */
-            if (c->unread)   add_chat_item(2, c, i);      /* UNREAD           */
-            if (c->favorite) add_chat_item(3, c, i);      /* FAVORITES        */
-        }
+    /* Wallpaper motif: one dim phone glyph, centred between the widget row
+     * and the hint line. A font glyph, not a picture — cheap to draw and
+     * it reads as the pixel-art wallpaper of this concept. */
+    lv_obj_t *motif = lv_label_create(g_root);
+    lv_label_set_text(motif, I_PHONE);
+    lv_obj_set_style_text_font(motif, ui_font_icon(), 0);
+    lv_obj_set_style_text_color(motif, pal->text_dim, 0);
+    lv_obj_remove_flag(motif, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(motif, LV_ALIGN_TOP_MID, 0, UI_HOME_MOTIF_Y);
 
-        /* Trailing New Chat row in ALL. */
-        snprintf(g_chat_text[UI_CHAT_MAX + 1].name,
-                 sizeof g_chat_text[0].name, "New Chat");
-        add_chat_item(0, NULL, UI_CHAT_MAX + 1);
+    /* The widget row: three honest widgets. Values come from data the
+     * shell already has — nothing invented, and the status bar's clock is
+     * deliberately not duplicated (the date here is a DATE, not a time). */
+    g_date_val = widget_card(g_root, UI_HOME_WIDGET_INSET, "DATE",
+                             "Thu 26 Nov");   /* seed; the clock tick updates it */
 
-        /* ARCHIVED: one summary row. (has_archived — chat_cat_n was
-         * zeroed for the fill pass above.) */
-        if (has_archived) {
-            snprintf(g_chat_text[UI_CHAT_MAX + 2].name,
-                     sizeof g_chat_text[0].name, "Archived");
-            snprintf(g_chat_text[UI_CHAT_MAX + 2].prev,
-                     sizeof g_chat_text[0].prev, "%d chats",
-                     list.archived_count);
-            add_chat_item(4, NULL, UI_CHAT_MAX + 2);
-            g_chat_items[chat_cat_off[4]].icon = I_ARCHIVE;
-        }
-    }
+    snprintf(buf, sizeof buf, "%d", ui_messaging_unread_total());
+    g_unread_val = widget_card(g_root,
+                               UI_HOME_WIDGET_INSET + UI_HOME_CARD_W + UI_HOME_WIDGET_GAP,
+                               "UNREAD", buf);
 
-    /* Point the page at ALL (the default category) before it is built. */
-    g_chat_m.items   = &g_chat_items[chat_cat_off[0]];
-    g_chat_m.n_items = (uint8_t)chat_cat_n[0];
-    g_chat_m.sel     = 0;
+    snprintf(buf, sizeof buf, "%d%%", ui_shell_battery_pct());
+    widget_card(g_root,
+                UI_HOME_WIDGET_INSET + 2 * (UI_HOME_CARD_W + UI_HOME_WIDGET_GAP),
+                "BATTERY", buf);
+
+    /* Key affordance line: what the two non-obvious keys do from here. */
+    lv_obj_t *hint = lv_label_create(g_root);
+    lv_label_set_text(hint, "OK: MENU  ·  END: LOCK");
+    lv_obj_set_style_text_font(hint, ui_font_chrome_s(), 0);
+    lv_obj_set_style_text_color(hint, pal->text_dim, 0);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_remove_flag(hint, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, UI_HOME_HINT_Y);
+
+    return g_root;
 }
 
-/* Point the chat list at category `cat`: repoint its item slice, reset the
- * selection, then refresh the strip + rows (same as the main menu). */
-static void chat_set_cat(int cat)
+lv_obj_t *ui_home_root(void)
 {
-    if (cat < 0) {
-        cat = 0;
-    }
-    if (cat >= CHAT_N_CATS) {
-        cat = CHAT_N_CATS - 1;
-    }
-    g_chat_m.items   = &g_chat_items[chat_cat_off[cat]];
-    g_chat_m.n_items = (uint8_t)chat_cat_n[cat];
-    g_chat_m.sel     = 0;
-    ui_list_set_category(g_chat, (uint8_t)cat);
-}
-
-static void chat_cycle_cat(int dir)
-{
-    int c = (g_chat_m.cat_sel + dir + CHAT_N_CATS) % CHAT_N_CATS;
-    chat_set_cat(c);
-}
-
-/* Horizontal swipe on the row area cycles the category strip (spec §1):
- * swipe left = next, swipe right = previous — the d-pad L/R equivalents. */
-static void chat_gesture(list_page_t *p, int dir)
-{
-    (void)p;
-    chat_cycle_cat(dir);
-}
-
-list_page_t *ui_home_build(lv_obj_t *parent)
-{
-    build_chat_items();   /* resolve the chat source into category slices */
-    g_chat = ui_list_build(parent, &g_chat_m);
-    ui_list_set_gesture_cb(g_chat, chat_gesture);   /* swipes cycle cats */
-    return g_chat;
-}
-
-list_page_t *ui_home_page(void)
-{
-    return g_chat;
+    return g_root;
 }
 
 const keymap_t *ui_home_keymap(void)
@@ -231,7 +140,9 @@ const keymap_t *ui_home_keymap(void)
     return &km_home;
 }
 
-void ui_home_cycle_cat(int dir)
+void ui_home_set_date(const char *date)
 {
-    chat_cycle_cat(dir);
+    if (g_date_val) {
+        lv_label_set_text(g_date_val, date);
+    }
 }

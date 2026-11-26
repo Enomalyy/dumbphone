@@ -43,6 +43,13 @@ extern "C" {
 #define UI_PANEL_H        480
 #define UI_STATUS_H        26   /* status bar height                    */
 #define UI_SOFTKEY_H       36   /* soft-key action bar height           */
+
+/* Softkey caps (spec §12.2): one per mirrored physical key — left under
+ * SHOULDER-L, centre under OK, right under SHOULDER-R. */
+#define UI_SK_CAP_W       98   /* cap width                            */
+#define UI_SK_CAP_PITCH  104   /* cap left-edge to cap left-edge       */
+#define UI_SK_CAP_INSET    6   /* first cap's inset from the bar edge  */
+#define UI_SK_CAP_TOP      5   /* cap top inset within the bar         */
 #define UI_CONTENT_Y  UI_STATUS_H
 #define UI_CONTENT_H  (UI_PANEL_H - UI_STATUS_H - UI_SOFTKEY_H)   /* 418 */
 
@@ -86,6 +93,17 @@ extern "C" {
 #define UI_SIDEBAR_ROWS_Y  34
 #define UI_SIDEBAR_ROW_H   40
 #define UI_SIDEBAR_ROWS_MAX 8   /* more than any page's table holds    */
+
+/* HOME screen (ui_home.c): the widget row + wallpaper motif. The card
+ * width works out whole with these insets/gaps: (320 - 2*11 - 2*5)/3 = 96,
+ * so the row is symmetric (11 px clear on each side). */
+#define UI_HOME_WIDGET_Y     18   /* widget row top                    */
+#define UI_HOME_WIDGET_H     54   /* one card: label over value        */
+#define UI_HOME_WIDGET_INSET 11   /* from the panel edges              */
+#define UI_HOME_WIDGET_GAP    5   /* between cards                     */
+#define UI_HOME_CARD_W ((UI_PANEL_W - 2 * UI_HOME_WIDGET_INSET - 2 * UI_HOME_WIDGET_GAP) / 3)
+#define UI_HOME_MOTIF_Y     150   /* wallpaper phone glyph, centred    */
+#define UI_HOME_HINT_Y      372   /* key affordance line above the bar */
 
 /* ================================================================== */
 /* Design tokens — font sizes (pixels)                                 */

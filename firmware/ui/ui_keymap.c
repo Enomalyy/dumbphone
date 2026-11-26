@@ -2,6 +2,8 @@
  * ui_keymap.c — resolve a physical key to the current page's action.
  */
 
+#include <stddef.h>   /* NULL */
+
 #include "ui/ui_keymap.h"
 
 action_t ui_keymap_action(const keymap_t *km, hal_key_t key)
@@ -33,5 +35,23 @@ action_t ui_keymap_action(const keymap_t *km, hal_key_t key)
         /* HOME/BACK/MENU/POWER/VOLUME are shell or desktop keys, not part of
          * the phone's contextual pad. */
         return ACT_NOOP;
+    }
+}
+
+/* Softkey-cap labels (spec §12.2): one short word per action that can
+ * surface on a cap; NULL for everything else. The shell shows a cap only
+ * when its key's current action has a label — an unbound key is absent,
+ * not blank-but-tappable. */
+const char *ui_keymap_label(action_t a)
+{
+    switch (a) {
+    case ACT_ACTIVATE:     return "OPEN";
+    case ACT_OPEN_OPTIONS: return "OPTIONS";
+    case ACT_GO_BACK:      return "BACK";
+    case ACT_GOTO_HOME:    return "HOME";
+    case ACT_CALL_APP:     return "CALLS";
+    case ACT_DIAL:         return "DIAL";
+    case ACT_UNLOCK:       return "UNLOCK";
+    default:               return NULL;
     }
 }

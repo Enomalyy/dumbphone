@@ -32,6 +32,7 @@
 #include "ui_keymap.h"
 #include "ui_menu.h"
 #include "ui_home.h"
+#include "ui_messaging.h"
 #include "ui_input.h"
 #include "ui_mainmenu.h"
 #include "ui_leaf.h"
@@ -98,8 +99,9 @@ static lv_obj_t *content_area;  /* swaps screens; the frame around it is fixed *
 static lv_obj_t *scr_menu;
 static lv_obj_t *lbl_clock;
 
-/* Screen stack (depth 4 is plenty for a skeleton). */
-static ui_screen_id_t screen_stack[4] = { UI_SCREEN_CHATLIST };
+/* Screen stack (depth 4 is plenty for a skeleton). HOME is the base: END
+ * returns here from anywhere, and a second END on it locks. */
+static ui_screen_id_t screen_stack[4] = { UI_SCREEN_HOME };
 static int stack_top = 0;
 
 /* Lock state machine (spec §1): a first END on HOME arms the lock, a
@@ -113,7 +115,7 @@ static pthread_t ui_thread_id;   /* the one and only thread allowed to touch LVG
  * One slot is enough for the skeleton (last request wins). */
 static pthread_mutex_t req_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool req_has_screen = false;
-static ui_screen_id_t req_screen = UI_SCREEN_CHATLIST;
+static ui_screen_id_t req_screen = UI_SCREEN_HOME;
 static bool req_quit = false;
 static bool req_has_stub = false;
 static page_id_t req_stub_id = PAGE_NONE;
@@ -237,7 +239,10 @@ static void build_status_bar(lv_obj_t *parent)
     make_label(parent, "4G", f_chrome, C_TEXT, 26, 5, 30);
 
     make_label(parent, I_BATTERY, f_icon, C_TEXT, 186, 4, 22);
-    make_label(parent, "76%", f_chrome, C_TEXT, 210, 5, 40);
+    /* One battery value, two readers: here and HOME's widget row. */
+    static char batt[8];
+    snprintf(batt, sizeof batt, "%d%%", ui_shell_battery_pct());
+    make_label(parent, batt, f_chrome, C_TEXT, 210, 5, 40);
     lbl_clock = make_label(parent, CLOCK_SEED_TIME, f_chrome, C_TEXT, 254, 5, 60);
     lv_obj_set_style_text_align(lbl_clock, LV_TEXT_ALIGN_RIGHT, 0);
 }
@@ -254,10 +259,12 @@ static void clock_tick_cb(lv_timer_t *timer)
     char buf[8];
     strftime(buf, sizeof buf, "%H:%M", &tm_now);
     lv_label_set_text(lbl_clock, buf);
-    /* The lock screen shares the live clock (ui_leaf.c owns the labels). */
+    /* The lock screen and HOME share the live date (ui_leaf.c / ui_home.c
+     * own their labels). */
     char dbuf[16];
     strftime(dbuf, sizeof dbuf, "%a %d %b", &tm_now);
     ui_leaf_set_lock_time(buf, dbuf);
+    ui_home_set_date(dbuf);
 }
 
 /* ------------------------------------------------------------------ */
@@ -278,9 +285,11 @@ static const keymap_t *page_keymap(void)
     case UI_SCREEN_HELDPRESS:  return &ui_heldpress_page()->keys;
     case UI_SCREEN_CALLHIST:   return &ui_calls_history_page()->keys;
     case UI_SCREEN_CONTACTS:   return &ui_calls_contacts_page()->keys;
+    case UI_SCREEN_CHATLIST:   return ui_messaging_keymap();
     case UI_SCREEN_STUB:       return ui_leaf_stub_keymap();
     case UI_SCREEN_LOCK:       return ui_leaf_lock_keymap();
-    default:                   return ui_home_keymap();   /* CHATLIST */
+    case UI_SCREEN_HOME:
+    default:                   return ui_home_keymap();
     }
 }
 
@@ -288,8 +297,8 @@ static void go_home(void)
 {
     end_armed = false;   /* leaving the END-on-HOME state */
     stack_top = 0;
-    screen_stack[0] = UI_SCREEN_CHATLIST;
-    ui_shell_show_screen(UI_SCREEN_CHATLIST);
+    screen_stack[0] = UI_SCREEN_HOME;
+    ui_shell_show_screen(UI_SCREEN_HOME);
     ui_sidebar_close();
 }
 
@@ -331,8 +340,8 @@ static void unlock_home(void)
 {
     end_armed = false;
     stack_top = 0;
-    screen_stack[0] = UI_SCREEN_CHATLIST;
-    ui_shell_show_screen(UI_SCREEN_CHATLIST);
+    screen_stack[0] = UI_SCREEN_HOME;
+    ui_shell_show_screen(UI_SCREEN_HOME);
 }
 
 static bool is_locked(void)
@@ -341,7 +350,7 @@ static bool is_locked(void)
 }
 
 /* The shell's page handles. Every page is a canonical menu_t rendered by
- * ui_menu.c; the DATA for each lives in its own module (ui_home for the
+ * ui_menu.c; the DATA for each lives in its own module (ui_messaging for the
  * chat list, ui_mainmenu for the menu, and one small module per settings/
  * calls page). The shell only owns these pointers and the screen stack. */
 static list_page_t *g_menu = NULL;
@@ -354,6 +363,7 @@ static list_page_t *g_contacts = NULL;
 /* Forward decls: the input entry point (the soft-key bar re-enters it) and
  * the leaf-page openers, all defined further down. */
 static void on_key(hal_key_t key);
+static void update_softkeys(const keymap_t *km);
 static void open_stub(page_id_t id);
 static void open_dial(int idx);
 static void open_page(page_id_t id);
@@ -365,7 +375,7 @@ static void open_page(page_id_t id);
  */
 static void activate(void)
 {
-    if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
+    if (screen_stack[stack_top] == UI_SCREEN_HOME) {
         push_screen(UI_SCREEN_MENU);
     } else if (screen_stack[stack_top] == UI_SCREEN_MENU) {
         open_page(ui_list_selected_target(g_menu));
@@ -389,7 +399,7 @@ static void activate(void)
 static void move_selection(int step)
 {
     if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-        ui_list_move_sel(ui_home_page(), step);
+        ui_list_move_sel(ui_messaging_page(), step);
     } else if (screen_stack[stack_top] == UI_SCREEN_MENU) {
         ui_list_move_sel(g_menu, step);
     } else if (screen_stack[stack_top] == UI_SCREEN_SETTINGS) {
@@ -418,6 +428,7 @@ static void do_action(action_t a, hal_key_t key)
     case ACT_OPEN_OPTIONS:
         /* SHOULDER-L: the context-sensitive sidebar for THIS page. */
         ui_sidebar_open_for(screen_stack[stack_top]);
+        update_softkeys(ui_sidebar_keymap());   /* legend follows the overlay */
         break;
     case ACT_DIAL:
         /* T9 keys 1..9 are contiguous in hal_key_t; the slot index is the
@@ -433,21 +444,21 @@ static void do_action(action_t a, hal_key_t key)
         if (screen_stack[stack_top] == UI_SCREEN_MENU) {
             ui_mainmenu_cycle_cat(-1);
         } else if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-            ui_home_cycle_cat(-1);
+            ui_messaging_cycle_cat(-1);
         }
         break;
     case ACT_CYCLE_CAT_NEXT:
         if (screen_stack[stack_top] == UI_SCREEN_MENU) {
             ui_mainmenu_cycle_cat(1);
         } else if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-            ui_home_cycle_cat(1);
+            ui_messaging_cycle_cat(1);
         }
         break;
     case ACT_CALL_APP:
         /* CALL from HOME goes straight to the Calls page (spec §2): the
          * call-history list. The CALLS category stays reachable via the
          * main menu. */
-        if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
+        if (screen_stack[stack_top] == UI_SCREEN_HOME) {
             push_screen(UI_SCREEN_CALLHIST);
         }
         break;
@@ -456,18 +467,42 @@ static void do_action(action_t a, hal_key_t key)
     }
 }
 
-/* The action bar is a TOUCH EQUIVALENT of three physical keys (spec §1:
+/* The softkey bar is a TOUCH EQUIVALENT of three physical keys (spec §1:
  * every element is tappable, and every tap has a key equivalent). Each cap
  * carries its hal_key_t in user_data and re-enters the same on_key() path as
- * a physical press, so its effect is whatever that key does on the current
- * page: CALLS = CALL (straight to Calls from HOME), OPEN = CENTER/OK,
- * OPTIONS = SHOULDER-L (the options sidebar). Nothing here is decorative. */
+ * a physical press, so its effect is whatever that key does in the current
+ * context. Nothing here is decorative. */
 static void on_softkey_tap(lv_event_t *e)
 {
     if (lv_indev_get_press_moved(lv_event_get_indev(e))) {
         return;   /* it was a drag, not a tap (same rule as list rows) */
     }
     on_key((hal_key_t)(intptr_t)lv_event_get_user_data(e));
+}
+
+/* Contextual softkey legend (spec §12.2): three caps, one per mirrored
+ * physical key — left under SHOULDER-L, centre under OK, right under
+ * SHOULDER-R. Each cap shows the word for whatever its key does in the
+ * CURRENT context (the page's keymap, or the sidebar's while it is open);
+ * a cap whose action is unbound is hidden entirely — absent, not a blank
+ * tappable ghost. Labels come from ui_keymap_label() as static strings and
+ * are set with lv_label_set_text_static, so updates never allocate. */
+static lv_obj_t *sk_cap[3];
+static lv_obj_t *sk_lbl[3];
+
+static void update_softkeys(const keymap_t *km)
+{
+    const action_t slots[3] = { km->shoulder_l, km->center, km->shoulder_r };
+    for (int i = 0; i < 3; i++) {
+        const char *txt = ui_keymap_label(slots[i]);
+        if (txt) {
+            lv_obj_clear_flag(sk_cap[i], LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text_static(sk_lbl[i], txt);
+        } else {
+            /* absent, not blank-but-tappable: hidden caps take no events */
+            lv_obj_add_flag(sk_cap[i], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 static void build_softkey_bar(lv_obj_t *parent)
@@ -481,18 +516,14 @@ static void build_softkey_bar(lv_obj_t *parent)
     lv_obj_set_style_border_width(bar, 0, 0);
 
     /* One cap per physical key it mirrors (the key is the cap's user_data). */
-    static const struct {
-        const char *label;
-        hal_key_t   key;
-    } caps[3] = {
-        { "CALLS",   HAL_KEY_CALL },
-        { "OPEN",    HAL_KEY_OK },
-        { "OPTIONS", HAL_KEY_SHOULDER_L },
+    static const hal_key_t cap_keys[3] = {
+        HAL_KEY_SHOULDER_L, HAL_KEY_OK, HAL_KEY_SHOULDER_R,
     };
     for (int i = 0; i < 3; i++) {
         lv_obj_t *box = lv_obj_create(bar);
-        lv_obj_set_size(box, 98, SOFTKEYS_H - 10);
-        lv_obj_set_pos(box, 6 + i * 104, 5);
+        lv_obj_set_size(box, UI_SK_CAP_W, SOFTKEYS_H - 2 * UI_SK_CAP_TOP);
+        lv_obj_set_pos(box, UI_SK_CAP_INSET + i * UI_SK_CAP_PITCH,
+                       UI_SK_CAP_TOP);
         lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_bg_color(box, C_BG, 0);
         lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
@@ -500,13 +531,16 @@ static void build_softkey_bar(lv_obj_t *parent)
         lv_obj_set_style_border_width(box, 2, 0);
         lv_obj_set_style_radius(box, 0, 0);
         lv_obj_add_event_cb(box, on_softkey_tap, LV_EVENT_RELEASED,
-                            (void *)(intptr_t)caps[i].key);
+                            (void *)(intptr_t)cap_keys[i]);
+        sk_cap[i] = box;
 
-        lv_obj_t *lbl = lv_label_create(box);
-        lv_label_set_text(lbl, caps[i].label);
-        lv_obj_set_style_text_font(lbl, f_chrome, 0);
-        lv_obj_set_style_text_color(lbl, C_TEXT, 0);
-        lv_obj_center(lbl);
+        /* "OPTIONS" is the longest cap label: seeding it means every later
+         * static-text swap fits the label's first layout. */
+        sk_lbl[i] = lv_label_create(box);
+        lv_label_set_text_static(sk_lbl[i], "OPTIONS");
+        lv_obj_set_style_text_font(sk_lbl[i], f_chrome, 0);
+        lv_obj_set_style_text_color(sk_lbl[i], C_TEXT, 0);
+        lv_obj_center(sk_lbl[i]);
     }
 }
 
@@ -611,8 +645,8 @@ static void page_swipe(int dir)
         return;
     }
     list_page_t *p = NULL;
-    if (ui_home_page() && lv_obj_is_visible(ui_list_root(ui_home_page()))) {
-        p = ui_home_page();
+    if (ui_messaging_page() && lv_obj_is_visible(ui_list_root(ui_messaging_page()))) {
+        p = ui_messaging_page();
     } else if (lv_obj_is_visible(scr_menu)) {
         p = g_menu;
     }
@@ -654,6 +688,7 @@ static void sidebar_execute(int idx)
         return;
     }
     ui_sidebar_close();   /* in-place action (view toggle): close after */
+    update_softkeys(page_keymap());
 }
 
 /* The sidebar's own key routing while it is open (km_sidebar). */
@@ -666,6 +701,7 @@ static void sidebar_on_key(hal_key_t key)
     case ACT_OPEN_OPTIONS:  /* re-press closes */
     case ACT_GO_BACK:       /* back closes (does not pop the page) */
         ui_sidebar_close();
+        update_softkeys(page_keymap());   /* legend returns to the page */
         break;
     case ACT_GOTO_HOME:     go_home();   /* go_home() closes the sidebar */
         break;
@@ -679,8 +715,11 @@ static void sidebar_on_key(hal_key_t key)
 
 void ui_shell_show_screen(ui_screen_id_t id)
 {
-    if (ui_home_page()) {
-        lv_obj_add_flag(ui_list_root(ui_home_page()), LV_OBJ_FLAG_HIDDEN);
+    if (ui_home_root()) {
+        lv_obj_add_flag(ui_home_root(), LV_OBJ_FLAG_HIDDEN);
+    }
+    if (ui_messaging_page()) {
+        lv_obj_add_flag(ui_list_root(ui_messaging_page()), LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_add_flag(scr_menu, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(ui_leaf_stub_root(), LV_OBJ_FLAG_HIDDEN);
@@ -701,9 +740,14 @@ void ui_shell_show_screen(ui_screen_id_t id)
         lv_obj_add_flag(ui_list_root(g_contacts), LV_OBJ_FLAG_HIDDEN);
     }
     switch (id) {
+    case UI_SCREEN_HOME:
+        if (ui_home_root()) {
+            lv_obj_remove_flag(ui_home_root(), LV_OBJ_FLAG_HIDDEN);
+        }
+        break;
     case UI_SCREEN_CHATLIST:
-        if (ui_home_page() && ui_list_root(ui_home_page())) {
-            lv_obj_remove_flag(ui_list_root(ui_home_page()),
+        if (ui_messaging_page() && ui_list_root(ui_messaging_page())) {
+            lv_obj_remove_flag(ui_list_root(ui_messaging_page()),
                                LV_OBJ_FLAG_HIDDEN);
         }
         break;
@@ -733,6 +777,9 @@ void ui_shell_show_screen(ui_screen_id_t id)
         lv_obj_remove_flag(ui_leaf_lock_root(), LV_OBJ_FLAG_HIDDEN);
         break;
     }
+
+    /* The softkey legend follows the page (spec §12.2). */
+    update_softkeys(page_keymap());
 }
 
 /* What a completed key press means (ui_input.c measures it and hands the
@@ -781,7 +828,7 @@ static void on_key(hal_key_t key)
      * row on HOME. (While LOCKED the input path never reaches here —
      * see run_iteration's KEY_UP gate.) */
     if (key == HAL_KEY_END && !ui_sidebar_is_open() &&
-        screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
+        screen_stack[stack_top] == UI_SCREEN_HOME) {
         if (end_armed) {
             do_lock();
             return;
@@ -793,14 +840,19 @@ static void on_key(hal_key_t key)
 
     /* The options sidebar intercepts every pad key while open: its own
      * contextual keymap decides (re-press/back close, END closes + home,
-     * CENTER executes, UP/DOWN move). */
+     * CENTER executes, UP/DOWN move). Everything else is a contextual pad
+     * key: ask this page's keymap. */
     if (ui_sidebar_is_open()) {
         sidebar_on_key(key);
-        return;
+    } else {
+        do_action(ui_keymap_action(page_keymap(), key), key);
     }
 
-    /* Everything else is a contextual pad key: ask this page's keymap. */
-    do_action(ui_keymap_action(page_keymap(), key), key);
+    /* An END that lands us on HOME arms the lock: spec §1's "END ×2 =
+     * lock" must hold from any page, not only when already standing on
+     * HOME (the first press is the one that brought us here). */
+    if (key == HAL_KEY_END && screen_stack[stack_top] == UI_SCREEN_HOME)
+        end_armed = true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -981,7 +1033,8 @@ int ui_shell_init(void)
     lv_obj_set_style_bg_opa(content_area, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(content_area, 0, 0);
 
-    ui_home_build(content_area);   /* HOME chat list (ui_home.c)       */
+    ui_messaging_build(content_area);   /* Messaging chat list        */
+    ui_home_build(content_area);        /* HOME: wallpaper + widgets  */
     g_menu = ui_mainmenu_build(content_area);   /* main menu (ui_mainmenu.c) */
     scr_menu = ui_list_root(g_menu);   /* the renderer's root object */
     build_settings_screen();
@@ -994,8 +1047,9 @@ int ui_shell_init(void)
 
     /* The renderer's page pool is a compile-time size: a page that failed to
      * build must be reported here, not crash the first time it is shown. */
-    if (!ui_home_page() || !g_menu || !g_settings || !g_speeddial ||
-        !g_heldpress || !g_callhist || !g_contacts) {
+    if (!ui_home_root() || !ui_messaging_page() || !g_menu ||
+        !g_settings || !g_speeddial || !g_heldpress || !g_callhist ||
+        !g_contacts) {
         printf("ui_shell: page pool exhausted — raise LIST_POOL in ui_menu.c\n");
         return -1;
     }
@@ -1008,7 +1062,7 @@ int ui_shell_init(void)
 
     lv_timer_create(clock_tick_cb, 1000, NULL);
 
-    ui_shell_show_screen(UI_SCREEN_CHATLIST);
+    ui_shell_show_screen(UI_SCREEN_HOME);
     return 0;
 }
 
@@ -1072,12 +1126,13 @@ void ui_shell_run_iteration(void)
     }
     if (have_screen) {
         /* Keep the stack honest: the harness may request a screen directly,
-         * but a later key press must still see where it really is. */
-        if (want == UI_SCREEN_CHATLIST) {
+         * but a later key press must still see where it really is. HOME is
+         * always the base of the stack. */
+        if (want == UI_SCREEN_HOME) {
             stack_top = 0;
-            screen_stack[0] = UI_SCREEN_CHATLIST;
+            screen_stack[0] = UI_SCREEN_HOME;
         } else {
-            screen_stack[0] = UI_SCREEN_CHATLIST;
+            screen_stack[0] = UI_SCREEN_HOME;
             screen_stack[1] = want;
             stack_top = 1;
         }
@@ -1087,6 +1142,13 @@ void ui_shell_run_iteration(void)
 
     ui_input_poll();
     lv_timer_handler();
+}
+
+int ui_shell_battery_pct(void)
+{
+    /* The simulator has no battery HAL: one honest value, two readers —
+     * the status bar and HOME's widget row. */
+    return 76;
 }
 
 bool ui_shell_quit_requested(void)

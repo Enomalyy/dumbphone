@@ -20,7 +20,7 @@
  * at 20:36 so a frame is reproducible regardless of when it was taken):
  *   dumbphone-desktop --shot out.ppm        panel only (320x480, device pixels)
  *   dumbphone-desktop --shot-win out.ppm    composed mock-up (bezel + panel)
- *   options: --screen chat|menu|settings|speeddials|heldpress|callhist
+ *   options: --screen home|chat|menu|settings|speeddials|heldpress|callhist
  *            |contacts|lock
  *            --press <button-id>
  *            --cycle left|right N  --key <name> [N]  --activate N
@@ -313,7 +313,7 @@ int main(int argc, char **argv)
         } else {
             fprintf(stderr,
                     "usage: %s [--shot out.ppm] [--shot-win out.ppm] "
-                    "[--screen chat|menu|settings|speeddials|heldpress"
+                    "[--screen home|chat|menu|settings|speeddials|heldpress"
                     "|callhist|contacts|lock] "
                     "[--press <button-id>] [--cycle left|right N] "
                     "[--key <name> [N] ...] [--activate N] "
@@ -372,7 +372,13 @@ int main(int argc, char **argv)
     if (shot_path || shot_win_path) {
         settle(frames);
 
-        if (screen && !strcmp(screen, "menu")) {
+        if (screen && !strcmp(screen, "home")) {
+            ui_shell_request_screen(UI_SCREEN_HOME);   /* the home screen */
+            settle(10);
+        } else if (screen && !strcmp(screen, "chat")) {
+            ui_shell_request_screen(UI_SCREEN_CHATLIST);   /* Messaging */
+            settle(10);
+        } else if (screen && !strcmp(screen, "menu")) {
             ui_shell_request_screen(UI_SCREEN_MENU);
             settle(10);
         } else if (screen && !strcmp(screen, "settings")) {

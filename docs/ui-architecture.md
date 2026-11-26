@@ -2,7 +2,10 @@
 
 Hardened from Eli's voice notes (25/11–26/11) + the Step-1 simulator. This is the
 reference for future build sessions: what every page IS, and what every key DOES on it.
-Companion diagram: `ui-map.png` (same folder). Visual reference for the main-menu layout:
+Companion diagram: `ui-map.png` (same folder) — **stale**: it predates the §12 build
+and its generator script is no longer in the tree, so it was not refreshed when HOME
+gained its widgets and the softkey bar became a contextual legend. Everything else in
+it matches the current model. Visual reference for the main-menu layout:
 `concept-art/gen-09-menu-lg-vx.png` (top strip + item list below).
 
 ## 1. Principles
@@ -24,8 +27,9 @@ Companion diagram: `ui-map.png` (same folder). Visual reference for the main-men
    **Swipes work across menus** (5-point capacitive panel + LVGL native gestures):
    scroll lists, cycle category carousels, page transitions. Nothing swipe-only —
    every swipe has a key equivalent.
-   The pinned action bar's caps are not decoration: each one fires the key it names
-   (CALLS = CALL, OPEN = CENTER, OPTIONS = SHOULDER-L) on the current page.
+   The pinned action bar's caps are a **contextual legend for the physical keys directly
+   beneath them** (§12.2): each cap shows what that key does on the current screen and is
+   itself tappable, firing the same action. Unbound actions leave no cap at all.
 7. **Options overlay.** SHOULDER-L opens a per-page sidebar of actions that work on that
    page (`ui/ui_options.c` holds the tables). While it is open it owns the pad keys:
    UP/DOWN move, CENTER executes, SHOULDER-L or SHOULDER-R closes it without leaving the
@@ -35,7 +39,7 @@ Companion diagram: `ui-map.png` (same folder). Visual reference for the main-men
 
 | Page | How it opens | Contents / behaviour |
 |---|---|---|
-| **HOME** | boot / END from anywhere | Background, widgets (later), **speed dials**: T9 keys 1–9 map to configurable contacts/actions. **Held presses** on L/R/UP/DOWN/T9 = custom actions (configurable in options). `CALL` key goes straight to the Calls page. `END` = home; 2nd press = lock. |
+| **HOME** | boot / unlock / END from anywhere | Flat wallpaper + a widget row (DATE · UNREAD · BATTERY — real data only, no duplicated clock), **speed dials**: T9 keys 1–9 map to configurable contacts/actions. **Held presses** on L/R/UP/DOWN/T9 = custom actions (configurable in options). `CALL` key goes straight to the Calls page. `CENTER` opens the main menu; `END` ×2 = lock. |
 | **MAIN MENU** | CENTER (OK) from HOME | Carousel **or** grid (toggle in settings; grid = classic 3×3 app layout). Top category strip cycled with **d-pad LEFT/RIGHT arrows**: **MESSAGING · CALLS · MAPS · SETTINGS**. **Messaging is the central/default selection.** Cycling a category live-swaps the item list below it (LG-VX reference layout: strip on top, items below). Up/Down + Center open items. |
 | — Messaging | | **Chats** (first option — straight into the unified WhatsApp chat-list interface from the concept art) · New Message · Others |
 | — Calls | | Call History · New Call · Contacts |
@@ -153,7 +157,7 @@ LIST pages --L/R--> cycle category strip (ALL|FAMILY|UNREAD|FAV|...|ARCHIVED)
 APP/LIST/SETTINGS pages: LEFT=options, RIGHT=back (contextual), END=home
 SHOULDER-L (any page) --opens--> OPTIONS sidebar --L/R/CENTER/END--> close | execute
 touch: tap row = select/open · drag = scroll · sideways drag = cycle category
-       tap action-bar cap = that key (CALLS | OPEN | OPTIONS)
+       tap softkey cap = the physical key beneath it (contextual legend, §12.2)
 ```
 
 ## 7. How icons/images are actually drawn
@@ -179,13 +183,23 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 - [x] **MAIN MENU:** 4-category carousel (MESSAGING · CALLS · MAPS · SETTINGS) with the
       icon tray + live-swapping item list; grid alternative rendering the same data,
       switched from Settings and re-synced whenever the menu is shown.
-- [x] **HOME / chat list:** real WAHA chat data from `host/data/chats.json`, category strip
+- [x] **HOME screen** (`ui/ui_home.c`): flat wallpaper (dim phone-glyph motif on the
+      panel background — no photos, no gradients) + a three-card widget row (DATE,
+      UNREAD from the chat list's real total, BATTERY via `ui_shell_battery_pct()`).
+      Not a `menu_t`: it is a standalone page exposing `root()`/`keymap()`.
+- [x] **MESSAGING / chat list** (`ui/ui_messaging.c`, reached only via the main menu):
+      real WAHA chat data from `host/data/chats.json`, category strip
       ALL · FAMILY · UNREAD · FAVORITES · ARCHIVED, two-line rows with time, `[n]` unread
       badge, `You:` prefix, media markers, tappable + scrolling.
 - [x] **Calls:** Call History and Contacts list pages (mock data), CALL key from HOME.
 - [x] **Settings:** working toggles (menu style, call preference) + Speed Dials and
       Held Presses config sub-pages with in-memory state.
-- [x] **HOME speed dials** (T9 1–9) and **held-press actions** (L/R/UP/DOWN/T9).
+- [x] **HOME speed dials** (T9 1–9) and **held-press actions** (L/R/UP/DOWN/T9,
+      `ui/ui_heldpress.c`).
+- [x] **Contextual softkey legend** (§12.2): the action bar's three caps are derived
+      from the current page's `keymap_t` via `ui_keymap_label(action_t)` — left cap under
+      SHOULDER-L, centre under OK, right under SHOULDER-R; unbound = absent; tappable;
+      follows the options sidebar and lock screen too. Allocation-free per update.
 - [x] **Options sidebar** (SHOULDER-L, per page — §1.7).
 - [x] **Touch:** tap rows and action-bar caps, drag-to-scroll, sideways drag cycles
       category strips. Deterministic touch injection in the harness.
@@ -199,7 +213,8 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 - [x] **Shell split into concern modules** (pure reorganization, every frame byte-identical):
       `ui_shell.c` keeps the frame/chrome, screen stack, request plumbing and the key
       dispatcher (the composition root); the rest moved out by concern —
-      `ui_home` (chat list), `ui_mainmenu` (category carousel + layout sync),
+      `ui_home` (the real HOME screen), `ui_messaging` (chat list),
+      `ui_mainmenu` (category carousel + layout sync),
       `ui_sidebar` (the options overlay), `ui_leaf` (lock + stub),
       `ui_input` (HAL event pump → key/swipe intents). The single "paint a row" helper
       `ui_row_style()` in `ui_menu.c` is used by both the renderer and the sidebar.
@@ -232,7 +247,9 @@ A page is data, but it still touches six places. This is the whole list, in orde
 1. **Data:** a `menu_t` (title, items with `label`/`icon`/optional `sub`/`meta`/`badge`/
    `target`, optional `cats` strip, and its own `keymap_t`) in a small `ui_<page>.{h,c}`
    module following `ui_settings.c` — the page owns its data, its `menu_t` and its keymap,
-   and exposes one build call plus `page()`/`keymap()` accessors (see `ui_home`, `ui_settings`; `ui_mainmenu` is the data-only variant).
+   and exposes one build call plus `page()`/`keymap()` accessors (see `ui_messaging`, `ui_settings`; `ui_mainmenu` is the data-only variant).
+   **Non-list pages** (HOME, lock screen) skip this pattern: they are standalone modules
+   exposing `root()`/`keymap()` — see `ui_home.c`.
    Data strings (`label`/`sub`/`meta`) are rendered through `ui_text_set()`, so Hebrew and
    emoji need no work at the call site. Row limits: `MENU_MAX_ITEMS` (33) and
    `MENU_MAX_CATS` (5) in `ui/ui_menu.h` — a page wider/taller than those is **clamped at
@@ -300,23 +317,45 @@ The simulator hides costs the device will pay. They are known, not solved:
 - Also still desktop-only: the draw buffer is a static full frame (307 KB) — it must become a
   partial buffer in PSRAM, and the LVGL tick/indev timers must be fed by ESP-IDF drivers.
 
-## 12. Pending design corrections (Eli's voice note, 26/11 11:52) — NOT YET BUILT
+## 12. Design corrections (Eli's voice note, 26/11 11:52) — **BUILT (26/11)**
 
-Two corrections to §1/§2/§6. Build these before extending the architecture further.
+Two corrections to §1/§2/§6. Both are implemented in the Tier-1 simulator; the S3 port is
+unaffected (no new HAL surface). Verified end-to-end in the simulator and by golden frames.
 
-**12.1 The HOME screen is missing — the chat list is not home.**
-The current build treats the WhatsApp/SMS chat list as the phone's home surface. Wrong. The chat
-list is *Messaging*, reached from the main menu. There must be a **dedicated home screen**: its own
-wallpaper/background, optionally widgets. Unlock lands on HOME; the menu (and therefore Messaging,
-Calls, Maps, Settings) branches off from HOME. Navigation baseline becomes:
-`LOCK -> HOME -> [menu] -> category -> page`, with END always returning to HOME.
+**12.1 The HOME screen is missing — the chat list is not home. — BUILT.**
+The WhatsApp/SMS chat list is now **Messaging**, reached only from the main menu's Messaging
+category. A dedicated HOME screen exists (`ui/ui_home.c`):
+- **Wallpaper:** flat and cheap by design — a dim phone-glyph motif (the FA `IPHONE` glyph at
+  theme scale, tinted `text_dim`) on the plain panel background. No photos, no gradients
+  (§1.5); every measurement is a token in `ui_theme.h` (`UI_HOME_*`).
+- **Widgets:** one row of three cards — DATE (from the shell clock tick), UNREAD (the chat
+  list's real total via `ui_messaging_unread_total()`), BATTERY (`ui_shell_battery_pct()`, one
+  honest value shared by the status bar and the widget). No duplicated clock, no fake data.
+- **Keymap:** CENTER opens the main menu; CALL opens Calls; T9 1–9 = speed dials (moved off the
+  chat list); SHOULDER-L = options; END ×2 = lock (the shell arms the lock when an END *lands*
+  on HOME, so "END ×2" holds from any page).
+- **Navigation baseline:** `LOCK ↦ HOME ↦ menu ↦ category ↦ page`. Boot and unlock land on
+  HOME; `UI_SCREEN_HOME` is the stack base; END returns to HOME from anywhere. The harness
+  gained `--screen home|chat` so both are drivable independently.
+- The old chat-list module was renamed `ui_home` ↦ `ui_messaging` (functions, keymap, options
+  table), and `ui_options.c` now keeps separate `opts_home`/`opts_messaging` tables.
 
-**12.2 The softkey bar must be a legend for the physical keys, and it must be contextual.**
-The two shoulder buttons are physical, sit directly under the bottom bar, and are
-**context-dependent** — their meaning changes per screen. The bottom bar is a small strip that
-*explains what the physical button beneath it does on this screen* ("OPTIONS", "BACK", "SELECT",
-"CALL", …) and is itself tappable so a touch user can trigger the same action. Today
-`build_softkey_bar()` in `ui/ui_shell.c` hardcodes `CALLS | OPEN | OPTIONS` — that is the bug.
-Correct behaviour: derive each cap's label from the page's `keymap_t` via `ui_keymap`, so the bar
-can never disagree with what the key actually does. Add a label field to the binding (or a
-`ui_keymap_label(action_t)` table) — one source of truth, no parallel strings.
+**12.2 The softkey bar must be a legend for the physical keys, and it must be contextual. — BUILT.**
+The hardcoded `CALLS | OPEN | OPTIONS` bar in `build_softkey_bar()` is gone. The action bar now
+holds up to three caps — left under SHOULDER-L, centre under OK, right under SHOULDER-R — each
+labelled from the current page's `keymap_t` through one table,
+`ui_keymap_label(action_t)` in `ui/ui_keymap.c` (`ACTIVATE`↔OPEN, `OPEN_OPTIONS`↔OPTIONS,
+`GO_BACK`↔BACK, `GOTO_HOME`↔HOME, `CALL_APP`↔CALLS, `DIAL`↔DIAL, `UNLOCK`↔UNLOCK; anything
+else = no cap). An unbound action leaves **no cap** (the object is hidden, so it is absent,
+not blank-but-tappable). Caps are tappable and route through the same `on_key()` path as the
+physical key. The legend refreshes on every screen change — including the options sidebar open
+(legend follows the sidebar's keymap) and its close — and costs no allocations per update
+(static label text, fixed cap objects). Geometry tokens: `UI_SK_CAP_*` in `ui_theme.h`.
+
+**Verification (26/11):** `just build-desktop` zero warnings; `just build-s3` clean. Drove the
+full loop headlessly — boot ↦ lock (END×2) ↦ unlock ↦ HOME ↦ menu ↦ each of the four
+categories ↦ END back to HOME — plus per-page cap checks for HOME, Messaging, a menu page,
+Calls, Settings, options sidebar open and the lock screen (all match their keymaps). Golden
+frames regenerated with the documented recipes; every diff is confined to the softkey bar
+except the intentional re-points (`home.png` new; `options-home`, `lock-from-chat`,
+`speeddial-mom`, `call-key` gained the HOME context); browser viewport re-captured live.

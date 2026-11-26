@@ -13,8 +13,15 @@
 #include "ui/ui_options.h"
 #include "ui/ui_icons.h"
 
-/* HOME (the chat list): a compose entry + jumps into the Calls pages. */
+/* HOME: a compose entry + jumps into the Calls pages. */
 static const opt_entry_t opts_home[] = {
+    { "New Chat",     I_ENVELOPE, OPT_ACTION_PAGE, PAGE_NEW_MESSAGE },
+    { "Call History", I_PHONE,    OPT_ACTION_PAGE, PAGE_CALL_HISTORY },
+    { "Contacts",     I_USERS,    OPT_ACTION_PAGE, PAGE_CONTACTS },
+};
+
+/* Messaging (the chat list): the same compose entry + Calls jumps. */
+static const opt_entry_t opts_messaging[] = {
     { "New Chat",     I_ENVELOPE, OPT_ACTION_PAGE, PAGE_NEW_MESSAGE },
     { "Call History", I_PHONE,    OPT_ACTION_PAGE, PAGE_CALL_HISTORY },
     { "Contacts",     I_USERS,    OPT_ACTION_PAGE, PAGE_CONTACTS },
@@ -61,6 +68,8 @@ static const opt_entry_t opts_stub[] = {
 const opt_entry_t *ui_options_for(ui_screen_id_t screen, int *n)
 {
     switch (screen) {
+    case UI_SCREEN_HOME:       *n = 3; return opts_home;
+    case UI_SCREEN_CHATLIST:   *n = 3; return opts_messaging;
     case UI_SCREEN_MENU:       *n = 3; return opts_menu;
     case UI_SCREEN_SETTINGS:   *n = 2; return opts_settings;
     case UI_SCREEN_SPEEDDIALS: *n = 1; return opts_speeddial;
@@ -69,6 +78,6 @@ const opt_entry_t *ui_options_for(ui_screen_id_t screen, int *n)
     case UI_SCREEN_CONTACTS:   *n = 1; return opts_contacts;
     case UI_SCREEN_STUB:       *n = 1; return opts_stub;
     case UI_SCREEN_LOCK:       *n = 0; return NULL;        /* locked: no options */
-    default:                   *n = 3; return opts_home;   /* chat list (HOME) */
+    default:                   *n = 0; return NULL;        /* unknown screen */
     }
 }

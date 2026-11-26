@@ -162,11 +162,21 @@ static const char PAGE_FMT[] =
 "display:flex;align-items:center;justify-content:center;touch-action:none;"
 "-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}"
 "canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges;"
-"max-width:100%%;max-height:100%%;width:auto;height:auto;touch-action:none}"
+"touch-action:none}"
 "</style></head><body>"
 "<canvas id=\"c\" width=\"%d\" height=\"%d\"></canvas><script>"
 "const cv=document.getElementById('c'),ctx=cv.getContext('2d',{alpha:false});"
 "let ws=null;"
+/* Integer-scale fit, in DEVICE pixels. CSS pixels are not pixels: a tablet
+ * with devicePixelRatio 2.5 maps one CSS px onto 2.5 real ones, so a
+ * whole-number CSS scale still lands each source pixel on 2.5 screen pixels —
+ * nearest-neighbour then alternates between 2 and 3 device pixels and the
+ * result reads as aliasing. Pick the largest integer scale in DEVICE pixels
+ * and convert back to CSS for layout. */
+"function fit(){const dpr=window.devicePixelRatio||1;"
+"const D=Math.max(1,Math.floor(Math.min(innerWidth*dpr/cv.width,innerHeight*dpr/cv.height)));"
+"cv.style.width=(cv.width*D/dpr)+'px';cv.style.height=(cv.height*D/dpr)+'px';}"
+"addEventListener('resize',fit);addEventListener('orientationchange',fit);fit();"
 "function draw(b){if(createImageBitmap){createImageBitmap(b).then(m=>{ctx.drawImage(m,0,0);m.close();})}"
 "else{const u=URL.createObjectURL(b),i=new Image();i.onload=()=>{ctx.drawImage(i,0,0);URL.revokeObjectURL(u);};i.src=u;}}"
 "function connect(){ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws');"
@@ -564,7 +574,14 @@ static bool encode_jpeg(const uint32_t *argb, int w, int h,
     cinfo.input_components = 4;
     cinfo.in_color_space = JCS_EXT_BGRX;      /* ARGB8888 in memory */
     jpeg_set_defaults(&cinfo);
-    jpeg_set_quality(&cinfo, 72, TRUE);
+    /* Flat pixel art: keep every channel at full resolution (4:4:4). The
+     * default 4:2:0 subsampling bleeds colour across hard edges, which looks
+     * like ringing/aliasing on this UI. Quality 95 keeps the wire small while
+     * the chroma fix does the visible work. (True lossless = PNG; the encoder
+     * is a follow-up because it needs a new dependency in the host build.) */
+    cinfo.comp_info[0].h_samp_factor = 1;
+    cinfo.comp_info[0].v_samp_factor = 1;
+    jpeg_set_quality(&cinfo, 95, TRUE);
     jpeg_start_compress(&cinfo, TRUE);
     while (cinfo.next_scanline < cinfo.image_height) {
         JSAMPROW row = (JSAMPROW)(const uint8_t *)argb +

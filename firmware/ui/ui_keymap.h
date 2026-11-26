@@ -48,6 +48,12 @@ typedef struct {
 /* The action a physical key performs under `km` (NOOP when unbound). */
 action_t ui_keymap_action(const keymap_t *km, hal_key_t key);
 
+/* Short softkey-cap label for an action (spec §12.2): NULL means the
+ * action never surfaces as a cap — an unbound key leaves no tappable
+ * ghost. Static strings: the shell sets them with lv_label_set_text_static,
+ * so cap updates never allocate. */
+const char *ui_keymap_label(action_t a);
+
 #ifdef __cplusplus
 }
 #endif

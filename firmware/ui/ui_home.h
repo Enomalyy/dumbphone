@@ -1,41 +1,33 @@
 /*
- * ui_home.h — the HOME screen: the unified WhatsApp chat list (spec §2).
+ * ui_home.h — HOME screen (spec §2): wallpaper + honest widgets.
  *
- * HOME is one canonical menu_t with a populated category strip
- * (ALL · FAMILY · UNREAD · FAVORITES · ARCHIVED, cycled with d-pad L/R).
- * This module owns the chat data adapter: it resolves the target's chat
- * source (chat_model.h) into per-category item slices and points the page's
- * `items` at the active slice. The renderer (ui_menu.c) draws it; the shell
- * (ui_shell.c) routes its keys through ui_home_keymap().
+ * HOME is its own screen, not a list page: a flat pixel-art background
+ * motif, one row of working widgets fed by data the shell already has
+ * (date from the status-bar clock, unread total from the chat source,
+ * battery from the shell's single value), and its own keymap — CENTER
+ * opens the MAIN MENU, T9 1-9 are speed dials, CALL jumps to Calls.
  *
- * Data + one build call: no navigation state, no key handling here.
+ * Owns: the home root object + widgets, its keymap. Exposes:
+ * ui_home_build / ui_home_root / ui_home_keymap / ui_home_set_date (this
+ * header). Must not touch: the navigation stack, the status/softkey bars,
+ * any other screen.
  */
 #pragma once
 
-#include "ui_menu.h"     /* menu_t, list_page_t */
-#include "ui_keymap.h"   /* keymap_t */
+#include "lvgl.h"
+#include "ui_keymap.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* Build HOME under `parent` (the shell's content area). Returns the root
+ * object; NULL on failure. Call AFTER ui_messaging_build() — the unread
+ * widget reads the chat source's total. */
+lv_obj_t *ui_home_build(lv_obj_t *parent);
 
-/* Build the HOME chat-list page under `parent` (UI thread). Returns the
- * rendered page (NULL only if the renderer's pool is full — the caller
- * checks, as it does for every list page). */
-list_page_t *ui_home_build(lv_obj_t *parent);
+/* The home root object (NULL until built). */
+lv_obj_t *ui_home_root(void);
 
-/* The built page (NULL before ui_home_build). Navigation code moves its
- * selection / reads its target through the ui_list_* accessors. */
-list_page_t *ui_home_page(void);
-
-/* This page's contextual keymap: d-pad L/R cycle the category strip, T9
- * 1..9 are speed dials, CENTER opens the main menu, END = home. */
+/* The contextual keymap for this screen. */
 const keymap_t *ui_home_keymap(void);
 
-/* Cycle the category strip by `dir` (+1 = next): repoint the page's item
- * slice and refresh (the same mechanism as the main-menu carousel). */
-void ui_home_cycle_cat(int dir);
-
-#ifdef __cplusplus
-}
-#endif
+/* Update the DATE widget (the shell's clock tick feeds it; same format as
+ * the status bar / lock screen date). */
+void ui_home_set_date(const char *date);

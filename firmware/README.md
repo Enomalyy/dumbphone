@@ -24,7 +24,9 @@ hal/                 the HAL contract — headers only, no backends
 ui/                  the phone shell (LVGL) — target-agnostic, one thread owns it
   ui_shell.c           the composition root: frame (status/action bars), screen stack,
                        key dispatch, font loading + the flush->HAL glue
-  ui_home.h/.c         HOME / chat list: the chat source resolved into per-category
+  ui_home.h/.c         the real HOME screen: flat wallpaper + widget row (date/unread/
+                       battery), its keymap — not a menu_t
+  ui_messaging.h/.c    Messaging / chat list: the chat source resolved into per-category
                        slices, its menu_t + keymap, category cycling
   ui_mainmenu.h/.c     main-menu carousel/grid data, category cycling, layout sync
   ui_sidebar.h/.c      the SHOULDER-L options overlay (rows use the shared ui_row_style)
@@ -114,8 +116,11 @@ Keys are not hard-wired to screens. Each page declares what every control does
 
 Shoulders and d-pad arrows are **different controls**. Slots a page does not use are
 `ACT_NOOP`. Adding a page is a keymap plus data (the full checklist is
-`../ui-architecture.md` §10), not new routing code. The three caps on the action bar are the
-touch equivalents of CALL, OK and SHOULDER-L on the current page.
+`../ui-architecture.md` §10), not new routing code. The caps on the action bar are a
+**contextual legend for the physical keys beneath them**: each cap is labelled from the
+current page's keymap via `ui_keymap_label()` (left = SHOULDER-L, centre = OK, right =
+SHOULDER-R), is tappable, and is absent when its action is unbound — so the bar can never
+disagree with what the key does.
 
 ### Chat list data
 
@@ -161,10 +166,13 @@ override with `DEPS_PREFIX=/path just build-desktop`.
 ## Status
 
 Phase 1 scaffold (S3 boots under QEMU) + a complete navigable UI in the Tier-1 simulator:
-HOME chat list with a five-way category strip, 4-category main menu (carousel + grid),
-settings tree with working toggles and two config sub-pages, Calls pages, options sidebar,
-touch taps/drags, lock screen. Every page is a `menu_t` on one renderer; all shared
-measurements and font sizes are design tokens in `ui/ui_theme.h`.
+a dedicated HOME screen (flat wallpaper + DATE/UNREAD/BATTERY widgets), the Messaging chat
+list with a five-way category strip, 4-category main menu (carousel + grid), settings tree
+with working toggles and two config sub-pages, Calls pages, options sidebar, contextual
+softkey legend, touch taps/drags, lock screen. Navigation is `LOCK ↦ HOME ↦ menu ↦
+category ↦ page` — END returns to HOME from anywhere, a second END on HOME locks. Every
+list page is a `menu_t` on one renderer; all shared measurements and font sizes are design
+tokens in `ui/ui_theme.h`.
 
 What is built, what is open, and the exact steps for adding a page:
 `../ui-architecture.md` §8 and §10. Next real milestone: wire `ui/` + LVGL into the S3 build

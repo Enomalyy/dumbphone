@@ -16,7 +16,8 @@ Panel frames (`shot-desktop`, 320×480 device pixels — these are the golden di
 
 | Frame | State |
 |---|---|
-| `chat` | `--screen chat` |
+| `home` | `--screen home` (the real HOME screen — wallpaper + widgets) |
+| `chat` | `--screen chat` (Messaging, reached from the main menu) |
 | `family` / `unread` / `favorites` / `archived` | `--screen chat --cycle right 1..4` |
 | `menu` | `--screen menu` |
 | `menu-calls` / `menu-settings` | `--screen menu --cycle right 1` / `... 3` |
@@ -24,8 +25,8 @@ Panel frames (`shot-desktop`, 320×480 device pixels — these are the golden di
 | `settings` / `settings-grid` | `--screen settings [--menu-style grid]` |
 | `speeddials` / `heldpress` / `callhist` / `contacts` / `lock` / `stub` | `--screen <name>` |
 | `speeddials-cycled` / `heldpress-cycled` | `--screen <name> --activate 1` |
-| `speeddial-mom` | `--screen chat --key digit-1` (T9 1 dials the seeded "Mom") |
-| `call-key` | `--screen chat --key call` |
+| `speeddial-mom` | `--screen home --key digit-1` (T9 1 dials the seeded "Mom" — T9 dialing lives on HOME) |
+| `call-key` | `--screen home --key call` (the CALL key opens Calls from HOME) |
 | `lock-from-chat` | `--screen chat --key end 2` |
 | `callhist-from-menu` | `--screen menu --cycle right 1 --activate 1` |
 | `chat-hebrew` | `--screen chat --key down 8` (selects the Hebrew row) |
@@ -33,7 +34,7 @@ Panel frames (`shot-desktop`, 320×480 device pixels — these are the golden di
 | `swipe-chat` / `swipe-menu` | `--screen chat|menu --swipe left 120` |
 | `tap-row3` | `--screen chat --tap 160 217` |
 | `key-down` | `--screen chat --key down` |
-| `options-home` / `options-menu` / `options-callhist` | `--screen <name> --key shoulder-l` |
+| `options-home` / `options-menu` / `options-callhist` | `--screen <name> --key shoulder-l` (`home` is the real HOME screen, not the chat list) |
 | `options-exec` | `--screen chat --key shoulder-l --key ok` |
 | `options-grid` | `--screen menu --key shoulder-l --key down --key ok` |
 | `browser-viewport` | a live capture of `just run-desktop`'s web viewport — not reproducible |

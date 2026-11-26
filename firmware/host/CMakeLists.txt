@@ -74,6 +74,7 @@ add_executable(dumbphone-desktop
     src/hal_stubs.c
     ${FW_DIR}/ui/ui_shell.c
     ${FW_DIR}/ui/ui_home.c
+    ${FW_DIR}/ui/ui_messaging.c
     ${FW_DIR}/ui/ui_input.c
     ${FW_DIR}/ui/ui_leaf.c
     ${FW_DIR}/ui/ui_mainmenu.c
