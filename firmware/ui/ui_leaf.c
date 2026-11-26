@@ -15,6 +15,7 @@
 
 #include "ui_icons.h"
 #include "ui_keymap.h"
+#include "ui_text.h"
 #include "ui_theme.h"
 #include "ui_leaf.h"
 
@@ -181,7 +182,8 @@ lv_obj_t *ui_leaf_stub_root(void)
 void ui_leaf_set_stub_title(const char *title)
 {
     if (stub_title_lbl) {
-        lv_label_set_text(stub_title_lbl, title);
+        /* A speed-dial contact name can be Hebrew: data text, not chrome. */
+        ui_text_set(stub_title_lbl, title);
     }
 }
 

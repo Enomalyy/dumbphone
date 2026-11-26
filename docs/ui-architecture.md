@@ -118,6 +118,28 @@ palette needs the built pages' styles re-applied (rebuild the pages). Navigation
 references the theme, so a swap cannot break routing — but today there is no `ui_theme_apply()`
 pass; adding one is the work a second theme needs.
 
+### Text, fonts and direction
+
+The pixel faces stay primary: **Silkscreen** for chrome/titles, **VT323** for list text,
+**Font Awesome** for icons. Real chat data is Hebrew, mixed Hebrew/English and emoji, so
+every face carries a runtime fallback chain (`lv_font_t.fallback`):
+
+```
+Silkscreen / VT323 / FA  ->  Droid Sans Hebrew (same px)  ->  Noto Emoji subset (same px)
+```
+
+Only code points the primary face reports missing reach a fallback, so Latin never leaves the
+pixel fonts. `ui/ui_text.h` is the **one** entry point for data text: `ui_text_set(label, utf8)`
+sets the string and its base direction — **RTL when Hebrew/Arabic letters outnumber LTR
+letters, LTR otherwise**. Chrome strings keep `lv_label_set_text()`. The rule lives in the UI
+layer, not in LVGL, so it is testable without a display. Mixed strings keep their internal
+runs: `LV_USE_BIDI` in `host/lv_conf.h` makes LVGL's draw pass order them; Arabic *joining*
+(`LV_USE_ARABIC_PERSIAN_CHARS`) stays off because the real WhatsApp corpus has no Arabic and
+no Arabic face is bundled. Fonts are loaded once in `ui_shell_init()` (no hot-path allocation).
+
+The fonts' licences, the emoji subsetting recipe and the per-file flash cost are in
+`firmware/host/assets/fonts/README.md`.
+
 ## 6. Navigation flow (see ui-map.png)
 
 ```
@@ -138,7 +160,8 @@ touch: tap row = select/open · drag = scroll · sideways drag = cycle category
 
 No image files, no GPU. The UI thread walks the object tree each frame and issues LVGL
 draw primitives into the RGB565 framebuffer: filled/outlined **rects, circles, arcs,
-lines**, plus **bitmap font glyphs** (Silkscreen/VT323 baked into the binary). Each icon
+lines**, plus **TTF glyphs rasterized at startup by tiny_ttf** (Silkscreen/VT323/FA,
+with the Hebrew + emoji fallbacks described in §5). Each icon
 is a handful of whole-pixel primitives in 1–2 palette colors (phone = rects + arc;
 envelope = rect + two lines). Cost is trivial on the S3 (pure math, no fill-rate worries)
 and crisp at ~165 PPI because everything snaps to integer pixels. This is also why the
@@ -166,6 +189,12 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 - [x] **Options sidebar** (SHOULDER-L, per page — §1.7).
 - [x] **Touch:** tap rows and action-bar caps, drag-to-scroll, sideways drag cycles
       category strips. Deterministic touch injection in the harness.
+- [x] **Hebrew, RTL and emoji:** Droid Sans Hebrew and a monochrome Noto Emoji
+      subset are chained behind every face; `ui_text_set()` picks each data
+      string's base direction. The chat list's Hebrew row and the 🚗 preview
+      render real glyphs (`screenshots/chat-hebrew.png`, regenerated
+      `screenshots/swipe-scroll.png`); every screen with no Hebrew stays
+      pixel-identical.
 - [x] **Golden frames:** `just shot-desktop` freezes the clock, so a frame is reproducible.
 - [x] **Shell split into concern modules** (pure reorganization, every frame byte-identical):
       `ui_shell.c` keeps the frame/chrome, screen stack, request plumbing and the key
@@ -181,6 +210,9 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
   needs the transport (there are no SMS entries yet).
 - PIN entry on the lock screen; settings/chat persistence (state is in memory, seeded from
   `chats.json`); real call log / contacts instead of mock data.
+- Emoji is monochrome and unshaped: flags are two regional-indicator letter glyphs,
+  ZWJ sequences stay separate, and the few symbols Noto Emoji lacks (e.g. `✓` `✗`)
+  fall to LVGL's tofu box. Arabic has bidi support but no bundled face.
 - `ui/` + LVGL are not in the S3 build yet (see §11).
 
 ## 9. Roadmap — WAHA as the messaging backbone (AFTER the UI)
@@ -231,5 +263,37 @@ The simulator hides costs the device will pay. They are known, not solved:
   LVGL objects on each category cycle / value refresh (chat list = ~33 rows × 4 labels).
   That is fine on a desktop, but it is allocation churn on the device; a fixed row pool that
   relabels and hides extras removes it.
+- **Fonts cost flash and RAM (new 26/11).** The bundle is 1,389,480 B total:
+  Silkscreen 32,220 B, VT323 153,116 B, Font Awesome 420,332 B,
+  **Droid Sans Hebrew 30,024 B**, **monochrome Noto Emoji subset 753,788 B**.
+  tiny_ttf keeps one instance per `(face, px)` pair — today the fallback table
+  creates **10 instances** (5 distinct px sizes × 2 faces), each with its own
+  glyph cache. On the device, ship the emoji
+  face only at the sizes that carry data (18/24 px, 2 instances) and/or cut
+  blocks from the subset (dropping `U+1F300-1F5FF` + `U+1F900-1F9FF` saves
+  ~510 KB and keeps smileys/hearts/hands/flags). The exact `fonttools subset`
+  command is in the fonts README; the emoji face is the first flash candidate
+  to trim.
 - Also still desktop-only: the draw buffer is a static full frame (307 KB) — it must become a
   partial buffer in PSRAM, and the LVGL tick/indev timers must be fed by ESP-IDF drivers.
+
+## 12. Pending design corrections (Eli's voice note, 26/11 11:52) — NOT YET BUILT
+
+Two corrections to §1/§2/§6. Build these before extending the architecture further.
+
+**12.1 The HOME screen is missing — the chat list is not home.**
+The current build treats the WhatsApp/SMS chat list as the phone's home surface. Wrong. The chat
+list is *Messaging*, reached from the main menu. There must be a **dedicated home screen**: its own
+wallpaper/background, optionally widgets. Unlock lands on HOME; the menu (and therefore Messaging,
+Calls, Maps, Settings) branches off from HOME. Navigation baseline becomes:
+`LOCK -> HOME -> [menu] -> category -> page`, with END always returning to HOME.
+
+**12.2 The softkey bar must be a legend for the physical keys, and it must be contextual.**
+The two shoulder buttons are physical, sit directly under the bottom bar, and are
+**context-dependent** — their meaning changes per screen. The bottom bar is a small strip that
+*explains what the physical button beneath it does on this screen* ("OPTIONS", "BACK", "SELECT",
+"CALL", …) and is itself tappable so a touch user can trigger the same action. Today
+`build_softkey_bar()` in `ui/ui_shell.c` hardcodes `CALLS | OPEN | OPTIONS` — that is the bug.
+Correct behaviour: derive each cap's label from the page's `keymap_t` via `ui_keymap`, so the bar
+can never disagree with what the key actually does. Add a label field to the binding (or a
+`ui_keymap_label(action_t)` table) — one source of truth, no parallel strings.

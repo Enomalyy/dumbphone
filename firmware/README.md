@@ -26,6 +26,7 @@ ui/                  the phone shell (LVGL) — target-agnostic, one thread owns
   ui_menu.h/.c         menu_t + THE generic list/grid renderer every page uses
   ui_keymap.h/.c       action vocabulary + per-page keymaps (contextual bindings)
   ui_theme.h/.c        palette + ALL design tokens (font sizes, panel/frame/menu metrics)
+  ui_text.h/.c         data-text entry point: text + base direction (Hebrew/RTL vs LTR)
   ui_options.h/.c      per-page option tables behind the SHOULDER-L sidebar
   ui_settings.h/.c     settings tree (working toggles)
   ui_speeddial.h/.c    HOME speed dials (T9 1-9) + their sub-page
@@ -112,6 +113,9 @@ file there**; the path is baked in by `host/CMakeLists.txt` (`CHAT_DATA_PATH`). 
 carrying the count, then New Chat. `mine` renders as a `You:` prefix, long names and snippets
 ellipsize, and `[image]` / `[voice note]` snippets render as sent — the renderer has no
 special cases. `ui/chat_model.h` is the interface; the S3 build will implement it from storage.
+Names and previews are *data* text: the renderer sends them through `ui_text_set()`, which
+picks RTL/LTR per string, and the font chain renders Hebrew and emoji (see `ui-architecture.md`
+§5 and `host/assets/fonts/README.md`).
 
 ### Browser viewport (phone/tablet)
 

@@ -32,6 +32,16 @@
 #define LV_USE_TINY_TTF         1           /* stb_truetype, bundled */
 #define LV_TINY_TTF_FILE_SUPPORT 1
 
+/* ---- bidirectional text -------------------------------------------
+ * Required for Hebrew chat data: the label draw pass reorders each
+ * paragraph using the label's base direction (ui_text_set() picks it).
+ * Arabic JOINING stays off on purpose: the real WhatsApp corpus contains
+ * no Arabic code points and no Arabic font is bundled, so the shaping
+ * table would be dead flash on the S3. Flip this only together with an
+ * Arabic fallback face. */
+#define LV_USE_BIDI             1
+#define LV_USE_ARABIC_PERSIAN_CHARS 0
+
 /* ---- built-in fallback fonts -------------------------------------- */
 #define LV_FONT_MONTSERRAT_12   1
 #define LV_FONT_MONTSERRAT_14   1

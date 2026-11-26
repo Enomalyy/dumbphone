@@ -98,6 +98,14 @@ extern "C" {
 #define UI_FONT_ICON_PX      22   /* Font Awesome: icons                */
 #define UI_FONT_ICON_S_PX    13   /* Font Awesome: carets/chevrons      */
 
+/* Fallback faces for every text size (ui_text.h decides direction; the
+ * shell loads these and chains them behind the pixel faces, so Latin never
+ * leaves Silkscreen/VT323). Hebrew: Droid Sans Hebrew (Apache-2.0, 30,024 B).
+ * Emoji: monochrome Noto Emoji subset (OFL, 753,788 B) - see the fonts README
+ * for the subsetting recipe and the S3 flash note. */
+#define UI_FONT_HEBREW_FILE  "DroidSansHebrew-Regular.ttf"
+#define UI_FONT_EMOJI_FILE   "NotoEmoji-Subset.ttf"
+
 /* ================================================================== */
 /* Palette                                                             */
 /* ================================================================== */

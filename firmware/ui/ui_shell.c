@@ -791,11 +791,11 @@ static uint32_t tick_get_cb(void)
     return (uint32_t)(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
 }
 
-/* Load a TTF from the font dir, falling back to a CWD-relative path and then
- * to a built-in Montserrat face. Called from ui_shell_init(), i.e. on the UI
- * thread, so the fonts are created in this LVGL instance before any screen
- * renders. The shell owns the font objects (ui_theme.h declares the accessors). */
-static lv_font_t *load_font(const char *name, int px, const lv_font_t *fallback)
+/* Load a TTF from the font dir (absolute path first, then a CWD-relative
+ * assets/fonts path for a build tree run from another directory). NULL when
+ * unavailable. Called from ui_shell_init(), i.e. on the UI thread, so the
+ * fonts are created in this LVGL instance before any screen renders. */
+static lv_font_t *load_ttf(const char *name, int px)
 {
     char path[512];
     snprintf(path, sizeof path, "A:" FONT_DIR "/%s", name);
@@ -804,11 +804,72 @@ static lv_font_t *load_font(const char *name, int px, const lv_font_t *fallback)
         snprintf(path, sizeof path, "A:assets/fonts/%s", name);
         f = lv_tiny_ttf_create_file(path, px);
     }
+    return f;
+}
+
+/* Primary face loader: a missing TTF falls back to the built-in Montserrat
+ * face so the simulator still starts on a tree without the assets. */
+static lv_font_t *load_font(const char *name, int px, const lv_font_t *fallback)
+{
+    lv_font_t *f = load_ttf(name, px);
     if (!f) {
-        printf("ui_shell: font %s missing, using built-in fallback\n", name);
+        printf("ui_shell: font %s (%d px) missing, using built-in fallback\n",
+               name, px);
         return (lv_font_t *)fallback;
     }
     return f;
+}
+
+/* Data-script fallback chain (ui-architecture.md §5): one Hebrew and one
+ * emoji face per TEXT SIZE. LVGL resolves a glyph at the face's own size, so
+ * a single 24 px Hebrew face cannot serve a 13 px label; this table loads
+ * each size once and shares it between the faces of that size. Only code
+ * points the primary face reports missing ever reach these. */
+#define FB_MAX 8
+static struct {
+    int        px;
+    lv_font_t *hebrew;
+    lv_font_t *emoji;
+} g_fb[FB_MAX];
+static int g_fb_n = 0;
+
+static lv_font_t *fallback_face(int px, bool emoji)
+{
+    for (int i = 0; i < g_fb_n; i++) {
+        if (g_fb[i].px == px) {
+            return emoji ? g_fb[i].emoji : g_fb[i].hebrew;
+        }
+    }
+    if (g_fb_n >= FB_MAX) {
+        return NULL;
+    }
+    int i = g_fb_n++;
+    g_fb[i].px = px;
+    g_fb[i].hebrew = load_ttf(UI_FONT_HEBREW_FILE, px);
+    g_fb[i].emoji  = load_ttf(UI_FONT_EMOJI_FILE, px);
+    if (!g_fb[i].hebrew && !g_fb[i].emoji) {
+        printf("ui_shell: no fallback faces at %d px\n", px);
+    }
+    return emoji ? g_fb[i].emoji : g_fb[i].hebrew;
+}
+
+/* Attach the chain to a primary face. `builtin` is the Montserrat pointer
+ * load_font() may have returned; it lives in rodata and must never be
+ * written to, so a missing TTF simply leaves that face unchained. */
+static void chain_fallbacks(lv_font_t *base, const lv_font_t *builtin, int px)
+{
+    if (!base || base == builtin) {
+        return;
+    }
+    lv_font_t *hebrew = fallback_face(px, false);
+    lv_font_t *emoji  = fallback_face(px, true);
+    if (hebrew && emoji) {
+        hebrew->fallback = emoji;   /* outer fallback: emoji anywhere */
+    }
+    lv_font_t *outer = hebrew ? hebrew : emoji;
+    if (outer) {
+        ((lv_font_t *)base)->fallback = outer;
+    }
 }
 
 /* Appearance API (declared in ui_theme.h): the shell owns the font objects. */
@@ -864,6 +925,17 @@ int ui_shell_init(void)
     f_body_m   = load_font("VT323-Regular.ttf", UI_FONT_BODY_M_PX, &lv_font_montserrat_14);
     f_icon     = load_font("FA-Solid.ttf", UI_FONT_ICON_PX, &lv_font_montserrat_16);
     f_icon_s   = load_font("FA-Solid.ttf", UI_FONT_ICON_S_PX, &lv_font_montserrat_12);
+
+    /* Hebrew/emoji fall behind every face. ui_text_set() picks each data
+     * string's base direction; the chain decides which face supplies a
+     * glyph the primary pixel face does not have. */
+    chain_fallbacks(f_chrome,   &lv_font_montserrat_14, UI_FONT_CHROME_PX);
+    chain_fallbacks(f_chrome_s, &lv_font_montserrat_12, UI_FONT_CHROME_S_PX);
+    chain_fallbacks(f_title,    &lv_font_montserrat_20, UI_FONT_TITLE_PX);
+    chain_fallbacks(f_body_l,   &lv_font_montserrat_18, UI_FONT_BODY_L_PX);
+    chain_fallbacks(f_body_m,   &lv_font_montserrat_14, UI_FONT_BODY_M_PX);
+    chain_fallbacks(f_icon,     &lv_font_montserrat_16, UI_FONT_ICON_PX);
+    chain_fallbacks(f_icon_s,   &lv_font_montserrat_12, UI_FONT_ICON_S_PX);
 
     /* The stable frame: pinned chrome + a content area that swaps screens. */
     lv_obj_t *root = lv_scr_act();

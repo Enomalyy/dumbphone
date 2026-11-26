@@ -15,6 +15,7 @@
  */
 
 #include "ui/ui_menu.h"
+#include "ui/ui_text.h"
 #include "ui/ui_theme.h"
 
 #include <stdio.h>
@@ -109,12 +110,17 @@ static lv_obj_t *mk_center_label(lv_obj_t *parent, const char *text, lv_font_t *
     return lbl;
 }
 
-static lv_obj_t *mk_line_label(lv_obj_t *parent, const char *text, lv_font_t *font,
-                               lv_color_t color, int x, int y, int w, int h)
+/* A DATA-bearing one-line label: chat names, previews, contact names and
+ * live values go through ui_text_set(), which also picks the base direction
+ * (ui_text.h). Chrome labels keep mk_label(). */
+static lv_obj_t *mk_data_line_label(lv_obj_t *parent, const char *text,
+                                    lv_font_t *font, lv_color_t color,
+                                    int x, int y, int w, int h)
 {
-    lv_obj_t *lbl = mk_label(parent, text, font, color, x, y, w);
+    lv_obj_t *lbl = mk_label(parent, "", font, color, x, y, w);
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_height(lbl, h);
+    ui_text_set(lbl, text);
     return lbl;
 }
 
@@ -265,7 +271,6 @@ static void rebuild_rows(list_page_t *p)
             p->row_icon[i] = ic;
 
             lv_obj_t *lb = lv_label_create(row);
-            lv_label_set_text(lb, it->label);
             lv_obj_set_style_text_font(lb, ui_font_body_m(), 0);
             lv_obj_set_style_text_color(lb, pal->text, 0);
             lv_obj_remove_flag(lb, LV_OBJ_FLAG_CLICKABLE);
@@ -273,6 +278,7 @@ static void rebuild_rows(list_page_t *p)
             lv_obj_set_pos(lb, 4, 36);
             lv_obj_set_size(lb, w - 8, h - 36);
             lv_obj_set_style_text_align(lb, LV_TEXT_ALIGN_CENTER, 0);
+            ui_text_set(lb, it->label);
             p->row_lbl[i] = lb;
         } else {
             char num[8];
@@ -285,25 +291,25 @@ static void rebuild_rows(list_page_t *p)
                                        32, 6, 26);
             /* The name column ends where the badge column starts: long names
              * truncate with dots, never overlap. */
-            p->row_lbl[i]   = mk_line_label(row, it->label, ui_font_body_l(), pal->text,
-                                            LABEL_X, 1, LABEL_W, 26);
+            p->row_lbl[i]   = mk_data_line_label(row, it->label, ui_font_body_l(),
+                                                 pal->text, LABEL_X, 1, LABEL_W, 26);
 
             /* Optional row extras: second line, right-aligned meta (time),
              * unread badge. Coords match the chat-row layout (gen-08). */
             if (it->sub && it->sub[0]) {
-                p->row_sub[i] = mk_line_label(row, it->sub, ui_font_body_m(),
-                                              pal->text_dim, SUB_X, 26, SUB_W, 22);
+                p->row_sub[i] = mk_data_line_label(row, it->sub, ui_font_body_m(),
+                                                   pal->text_dim, SUB_X, 26, SUB_W, 22);
             }
             if (it->meta && it->meta[0]) {
                 /* Right-aligned value/time column, one line only. The column
                  * ends 12 px inside the row (UI_ROW_META_W): it used to run
                  * into the row border, which clipped the last glyph — every
                  * contact number lost its final digit and chat times lost the
-                 * last pixel of the minutes. mk_line_label's explicit height
+                 * last pixel of the minutes. The explicit height below
                  * is what makes LVGL's DOTS mode one line; without it an
                  * over-long value wrapped to a second line instead. */
-                lv_obj_t *t = mk_line_label(row, it->meta, ui_font_chrome_s(),
-                                            pal->text_dim, META_X, 4, META_W, 20);
+                lv_obj_t *t = mk_data_line_label(row, it->meta, ui_font_chrome_s(),
+                                                 pal->text_dim, META_X, 4, META_W, 20);
                 lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_RIGHT, 0);
             }
             if (it->badge > 0) {
