@@ -125,3 +125,4 @@ that layout, so any move has to start in the private tree.
    patches as issues instead, or make GitHub the source of truth for `firmware/`.
 3. **Which of R1–R5 become issues**, and where they sit relative to Stages 0–D.
 4. **Supported dev platforms.** Linux only (WSL2 on Windows), or native Windows/macOS too.
+
