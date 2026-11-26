@@ -35,10 +35,12 @@ caret glyphs in `ui/ui_menu.c`); the authoritative name→codepoint table is
 
 The preview / conversational text (`UI_FONT_BODY_M_PX`, 16 px) is **Pixelify
 Sans** baked to an LVGL bitmap font — `firmware/ui/font_pixelify_m.c`
-(64,661 B source, ~40 KiB rodata). Eliyahu's call, 26/11: Pixelify for the
-small letters, VT323 (TTF) kept for the big ones. 8-bit depth: 1-bit looked
-too muddy on the dark palette, 8-bit reads clean while keeping the pixel
-look. The large body face (`UI_FONT_BODY_L_PX`, 24 px) stays VT323 as a TTF.
+(64,661 B source, ~40 KiB rodata). It is the provisional default for the
+small letters, with VT323 (TTF) for the big ones — provisional is the point:
+Settings > Display > Font sets the face and size of all three levels, and no
+face has been chosen. 8-bit depth: 1-bit looked too muddy on the dark
+palette, 8-bit reads clean while keeping the pixel look. The large body face
+(`UI_FONT_BODY_L_PX`, 24 px) is VT323 as a TTF.
 
 Source: Pixelify Sans OFL 1.1 (https://fonts.google.com/specimen/Pixelify+Sans),
 static weight 400, subset to printable ASCII (U+0020..U+007E). Exact recipe:

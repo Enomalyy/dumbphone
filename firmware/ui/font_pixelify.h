@@ -8,9 +8,10 @@
  *
  *   lv_font_pixelify_m — 16 px, preview / conversational text (UI_FONT_BODY_M_PX)
  *
- * The large body face (UI_FONT_BODY_L_PX) is VT323 loaded as a TTF by the shell
- * (ui_shell.c) — Eliyahu's call, 26/11: Pixelify for the small letters, VT323
- * for the big ones.
+ * The large body face (UI_FONT_BODY_L_PX) is VT323 loaded as a TTF by the
+ * shell (ui_shell.c). Both are the PROVISIONAL shipped defaults of the
+ * SUBTEXT / TEXT roles: Settings > Display > Font sets each role's face and
+ * size, and no face has been chosen (ui-architecture.md §14.12).
  *
  * The descriptor is const rodata. ui_shell_init() takes a mutable shallow copy
  * and chains Droid Sans Hebrew -> Noto Emoji behind it by writing the copy's
