@@ -13,13 +13,14 @@ fourth roadmap:
 - **Stages 0, A–D** — *what the phone will do*, in the order it gets built.
 - **§14, §15, §16 …** — *where an item's plan is written down*. Chapter numbers inside
   `ui-architecture.md`. §14 is the big UI chapter (14.1–14.12 are individual behaviours that Stages
-  A–D consume), §15 is Stage 0, §16 is the structural work below. Nothing gets built "as §14" — a
+  A–D consume), §16 is the structural work below; the dated decisions (§12, §13, §15) live in
+  `decisions.md`. Nothing gets built "as §14" — a
   stage gets built, and it cites the §'s that describe it.
 - **R1–R5** — *what the code needs* for those stages to be cheap and safe, from the outside review.
   Since 26/11 they are part of the plan (spec §16), not a proposal beside it.
 
 Mapping: Stage A = §14.9–14.12 · B = §14.1–14.3, 14.5, 14.6 · C = §14.4, 14.8 · D = §14.7 ·
-Stage 0 = §15 · R1, R3, R5 = §16.1, §16.3, §16.5 · R4 = §16.4 (first half of D) · R2 = §16.2
+Stage 0 = decisions §15 · R1, R3, R5 = §16.1, §16.3, §16.5 · R4 = §16.4 (first half of D) · R2 = §16.2
 (folded into R5).
 
 ## The order
