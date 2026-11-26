@@ -9,8 +9,9 @@
  *      pixel size of every font face — as named UI_* constants.
  *
  * "Make all menus smaller" or "make all fonts bigger" is ONE edit in this
- * file. Renderers never carry their own copies of these numbers; ui_menu.c
- * and ui_shell.c alias the tokens they use (see their geometry blocks).
+ * file. Renderers never carry their own copies of these numbers: ui_menu.c,
+ * ui_sidebar.c, ui_leaf.c and ui_shell.c alias the tokens they use (see the
+ * geometry block at the top of each).
  *
  * A theme changes APPEARANCE only. It never touches layout semantics or key
  * bindings: navigation data (menu_t / keymap_t) never references the theme,
@@ -80,7 +81,7 @@ extern "C" {
 #define UI_GRID_CELL_W (UI_PANEL_W / UI_GRID_COLS)
 #define UI_GRID_ROW_H      84   /* icon + up-to-two-line label         */
 
-/* Options sidebar overlay (ui_shell.c). */
+/* Options sidebar overlay (ui_sidebar.c). */
 #define UI_SIDEBAR_W      190
 #define UI_SIDEBAR_ROWS_Y  34
 #define UI_SIDEBAR_ROW_H   40

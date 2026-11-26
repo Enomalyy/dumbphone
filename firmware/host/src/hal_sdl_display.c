@@ -40,6 +40,8 @@ static bool key_held[MAX_BEZEL_KEYS];
  * surfaces consistent. */
 static SDL_mutex *gfx_lock;
 
+static int compose_and_present(const SDL_Rect *panel_area);
+
 int hal_display_init(void)
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -84,7 +86,12 @@ int hal_display_init(void)
 
     SDL_Log("desktop simulator: panel 320x480, bezel x%.2f -> window %dx%d",
             (double)bezel_scale(), win_w, win_h);
-    return 0;
+
+    /* Prime the composition. hal_display_blit_area() only re-composes the
+     * dirty recess region (that is the whole point of the region blit), so
+     * without this first full pass the bezel and the window surface would
+     * stay uninitialised until the first key press. */
+    return compose_and_present(NULL);
 }
 
 void hal_display_info(hal_display_info_t *out)
@@ -104,18 +111,25 @@ static int compose_and_present(const SDL_Rect *panel_area)
         SDL_BlitSurface(bezel_bg, NULL, compose, NULL);
     }
 
-    /* 2. the panel (or its dirty part), scaled into its recess. The dst
-     * edges come from the scaled region boundaries so tiling areas cover
-     * the recess exactly — no seams between adjacent flushes. */
+    /* 2. the panel (or its dirty part), scaled into its recess. Both dst
+     * edges are scaled from the SRC edges first and only then offset by the
+     * recess origin: subtracting the already-offset dst.x instead shrank
+     * every area by the bezel margin (the full frame came out 276x454 in a
+     * 320x480 recess — a visibly compressed panel). Because adjacent areas
+     * share the same boundary formula, they still tile the recess exactly. */
     int px, py, pw, ph;
     bezel_panel_rect(&px, &py, &pw, &ph);
     const SDL_Rect *src = panel_area ? panel_area
                                      : &(const SDL_Rect){0, 0, FB_W, FB_H};
+    const int sx0 = (int)(((uint64_t)src->x * pw) / FB_W);
+    const int sy0 = (int)(((uint64_t)src->y * ph) / FB_H);
+    const int sx1 = (int)(((uint64_t)(src->x + src->w) * pw) / FB_W);
+    const int sy1 = (int)(((uint64_t)(src->y + src->h) * ph) / FB_H);
     SDL_Rect dst;
-    dst.x = px + (int)(((uint64_t)src->x * pw) / FB_W);
-    dst.y = py + (int)(((uint64_t)src->y * ph) / FB_H);
-    dst.w = (int)(((uint64_t)(src->x + src->w) * pw) / FB_W) - dst.x;
-    dst.h = (int)(((uint64_t)(src->y + src->h) * ph) / FB_H) - dst.y;
+    dst.x = px + sx0;
+    dst.y = py + sy0;
+    dst.w = sx1 - sx0;
+    dst.h = sy1 - sy0;
     if (SDL_BlitScaled(fb_surface, src, compose, &dst) != 0) {
         return -1;
     }

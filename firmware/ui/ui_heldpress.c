@@ -5,7 +5,7 @@
  * holding a page target: a long press of that key opens the page. The
  * preset list is short on purpose — these are quick actions reachable from
  * any page without touching the main menu, and the display strings must fit
- * the renderer's 52 px meta column (<= 8 chars at the chrome-small font).
+ * the renderer's 104 px meta column (UI_ROW_META_W).
  */
 
 #include <string.h>

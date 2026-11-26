@@ -63,7 +63,8 @@ static lv_obj_t *side_label(lv_obj_t *parent, const char *text,
 }
 
 /* Selection look: the shared row paint (band/border/fill) plus the text
- * colours that go with it — dark on the green selection. */static void style_side_row(int idx)
+ * colours that go with it — dark on the green selection. */
+static void style_side_row(int idx)
 {
     lv_obj_t *row = side_rows[idx];
     if (!row) {

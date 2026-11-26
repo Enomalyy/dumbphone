@@ -19,7 +19,6 @@
 #include "ui_icons.h"
 #include "ui_keymap.h"
 #include "ui_menu.h"
-#include "ui_theme.h"   /* UI_CHAT_MAX */
 #include "ui_home.h"
 
 #define CHAT_N_CATS     5

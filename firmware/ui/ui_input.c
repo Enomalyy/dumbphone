@@ -63,6 +63,13 @@ void ui_input_poll(void)
 {
     hal_input_event_t ev;
     while (hal_input_poll(&ev)) {
+        /* A backend that reports a key id past HAL_KEY__COUNT would index
+         * the press tables out of bounds; every real backend maps its
+         * hardware onto the enum, so this only catches a porting mistake. */
+        if ((ev.type == HAL_INPUT_KEY_DOWN || ev.type == HAL_INPUT_KEY_UP) &&
+            (unsigned)ev.u.key >= (unsigned)HAL_KEY__COUNT) {
+            continue;
+        }
         switch (ev.type) {
         case HAL_INPUT_TOUCH_DOWN:
             touch_state.pressed = true;

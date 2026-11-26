@@ -200,7 +200,7 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
       `ui_shell.c` keeps the frame/chrome, screen stack, request plumbing and the key
       dispatcher (the composition root); the rest moved out by concern —
       `ui_home` (chat list), `ui_mainmenu` (category carousel + layout sync),
-      `ui_sidebar` (options overlay, incl. the shared row paint), `ui_leaf` (lock + stub),
+      `ui_sidebar` (the options overlay), `ui_leaf` (lock + stub),
       `ui_input` (HAL event pump → key/swipe intents). The single "paint a row" helper
       `ui_row_style()` in `ui_menu.c` is used by both the renderer and the sidebar.
 
@@ -227,19 +227,29 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 
 ## 10. Adding a page — the exact checklist
 
-A page is data, but it still touches five places. This is the whole list, in order:
+A page is data, but it still touches six places. This is the whole list, in order:
 
 1. **Data:** a `menu_t` (title, items with `label`/`icon`/optional `sub`/`meta`/`badge`/
    `target`, optional `cats` strip, and its own `keymap_t`) in a small `ui_<page>.{h,c}`
    module following `ui_settings.c` — the page owns its data, its `menu_t` and its keymap,
-   and exposes one build call plus `page()`/`keymap()` accessors (see `ui_home`, `ui_mainmenu`).
+   and exposes one build call plus `page()`/`keymap()` accessors (see `ui_home`, `ui_settings`; `ui_mainmenu` is the data-only variant).
+   Data strings (`label`/`sub`/`meta`) are rendered through `ui_text_set()`, so Hebrew and
+   emoji need no work at the call site. Row limits: `MENU_MAX_ITEMS` (33) and
+   `MENU_MAX_CATS` (5) in `ui/ui_menu.h` — a page wider/taller than those is **clamped at
+   build time with a printed message**, so raise the constant first.
 2. **Target id:** add it to `page_id_t` in `ui/ui_menu.h` if something opens it.
-3. **Build:** build it once in `ui_shell_init()` and raise `LIST_POOL` in `ui/ui_menu.c`
-   (that constant is the app's whole page budget; the shell prints an error if it runs out).
+3. **Build:** build it once in `ui_shell_init()`, **add its `.c` to `host/CMakeLists.txt`**
+   (the desktop build lists sources explicitly — forgetting this is an "undefined
+   reference", not a silent failure), raise `LIST_POOL` in `ui/ui_menu.c` (that constant is
+   the app's whole page budget; the shell prints an error if it runs out) and add the new
+   page to the `ui_shell_init()` NULL check.
 4. **Routing:** a `ui_screen_id_t` in `ui/ui_shell.h`, then a case in `ui_shell_show_screen()`,
    `page_keymap()`, `move_selection()`, `activate()`, and `open_page()` if it is a target —
-   all in `ui_shell.c`, which is the only place that knows the screen stack.
+   all in `ui_shell.c`, which is the only place that knows the screen stack (it hides every
+   other page's root in `ui_shell_show_screen()`, so add the new root there too).
 5. **Options:** a row table for it in `ui/ui_options.c` (the SHOULDER-L sidebar).
+6. **Swipe (only if it has a category strip):** `ui_list_set_gesture_cb()` on the built page
+   with a handler that cycles its categories — see `chat_gesture`/`menu_gesture`.
 
 Appearance needs no work: colours come from `ui_palette()`, sizes from the `UI_*` tokens,
 so a new page matches the others automatically.
@@ -250,15 +260,23 @@ The simulator hides costs the device will pay. They are known, not solved:
 
 - **Full-frame flush — SOLVED (26/11).** The HAL contract now offers a region blit,
   `hal_display_blit_area(pixels, x, y, w, h)` (`hal/hal_display.h`; `hal_display_blit`
-  is a thin full-panel wrapper over it). `display_flush_cb()` still updates the shadow
-  framebuffer row by row (frame dumps and the browser viewport read it) but presents
-  only the dirty LVGL area — straight from the render buffer, whose rows are packed
-  `w*2` bytes with no stride. The host backend copies just the region rows and uploads
-  one window rect; on the S3 this becomes a partial SPI write per flush instead of a
-  fixed 307 KB. Flush cost is measurable: build the host with `-DFLUSH_STATS=ON`
+  is a thin full-panel wrapper over it). `display_flush_cb()` presents only the dirty
+  LVGL area and owns nothing else: it validates the area against the panel, hands the
+  region over, and calls `lv_display_flush_ready()`. The **shadow framebuffer belongs
+  to the backend** (its blit copies the region rows before presenting; frame dumps and
+  the browser viewport read it through `hal_display_framebuffer()`), so a backend with
+  no shadow can still display. The host uploads one scaled window rect; on the S3 this
+  becomes a partial SPI write per flush instead of a fixed 307 KB. The callback reads
+  the draw buffer's real `stride` and falls back to one blit per row if a device
+  `lv_conf` pads rows for cache alignment — the host's stride is packed (`w*2`).
+  Flush cost is measurable: build the host with `-DFLUSH_STATS=ON`
   (`just build-desktop-stats`) for a bytes/flush-count/largest-area summary at exit.
   Measured on boot ↦ chat list ↦ d-pad move ↦ menu: 1,228,800 B full-frame vs
-  639,616 B region (47.9% less), frames pixel-identical.
+  639,616 B region (47.9% less), frames pixel-identical; and a region-composed window
+  is pixel-identical to a full re-compose at scale 1.0 / 1.37 / 1.6 (no seams).
+  **The `screenshots/window-*.png` frames are the only check on that path** (bezel,
+  scaling, dst rects, held keys): the panel frames are written from the HAL's panel
+  buffer and stayed AE=0 through a bug that drew the panel 10% small in the window.
 - **Rows are rebuilt, not recycled.** `rebuild_rows()` deletes and recreates every row's
   LVGL objects on each category cycle / value refresh (chat list = ~33 rows × 4 labels).
   That is fine on a desktop, but it is allocation churn on the device; a fixed row pool that
@@ -266,14 +284,19 @@ The simulator hides costs the device will pay. They are known, not solved:
 - **Fonts cost flash and RAM (new 26/11).** The bundle is 1,389,480 B total:
   Silkscreen 32,220 B, VT323 153,116 B, Font Awesome 420,332 B,
   **Droid Sans Hebrew 30,024 B**, **monochrome Noto Emoji subset 753,788 B**.
-  tiny_ttf keeps one instance per `(face, px)` pair — today the fallback table
-  creates **10 instances** (5 distinct px sizes × 2 faces), each with its own
-  glyph cache. On the device, ship the emoji
+  tiny_ttf keeps one instance per `(face, px)` pair — 7 primary faces plus the
+  fallback table's **10 instances** (5 distinct px sizes × 2 faces, 13/16/18/22/24),
+  each with its own glyph cache: `LV_TINY_TTF_CACHE_GLYPH_CNT` (128) descriptors plus
+  a second 128-entry bitmap cache, allocated lazily. That ceiling — 17 instances —
+  is the RAM item to watch on the chip; lower the glyph count and/or drop the 13/22 px
+  emoji instances there. On the device, ship the emoji
   face only at the sizes that carry data (18/24 px, 2 instances) and/or cut
   blocks from the subset (dropping `U+1F300-1F5FF` + `U+1F900-1F9FF` saves
   ~510 KB and keeps smileys/hearts/hands/flags). The exact `fonttools subset`
   command is in the fonts README; the emoji face is the first flash candidate
-  to trim.
+  to trim. Expected runtime noise: every glyph a *chain* face lacks makes
+  tiny_ttf log `cache not allocated` (it means "no such glyph here", and the next
+  face answers) — a few hundred lines per run on the chat list, not an error.
 - Also still desktop-only: the draw buffer is a static full frame (307 KB) — it must become a
   partial buffer in PSRAM, and the LVGL tick/indev timers must be fed by ESP-IDF drivers.
 

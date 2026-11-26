@@ -121,6 +121,12 @@ static lv_obj_t *mk_data_line_label(lv_obj_t *parent, const char *text,
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_height(lbl, h);
     ui_text_set(lbl, text);
+    /* An RTL base direction makes LVGL's AUTO alignment right-align the
+     * paragraph, which would slide a Hebrew name out of its column and up
+     * against the time. The direction still orders the runs; the column
+     * grid stays left-anchored for every language. (meta overrides this
+     * with RIGHT below.) */
+    lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
     return lbl;
 }
 
@@ -336,6 +342,29 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
     if (g_pool_n >= LIST_POOL) {
         printf("ui_menu: page pool full (LIST_POOL=%d) — raise it\n", LIST_POOL);
         return NULL;
+    }
+    /* The row and tray arrays below are compile-time sizes. Clamp the page's
+     * counts to them here, once, so nothing downstream (rebuild_rows,
+     * style_cell, ui_list_set_category) can index past an array: an
+     * over-wide category strip is silent memory corruption, not a visual
+     * glitch. */
+    if (m->n_cats > MENU_MAX_CATS) {
+        printf("ui_menu: page '%s' has %u categories > MENU_MAX_CATS (%d) — "
+               "raise it in ui_menu.h\n",
+               m->title ? m->title : "?", (unsigned)m->n_cats, MENU_MAX_CATS);
+        m->n_cats = MENU_MAX_CATS;
+    }
+    if (m->n_items > MENU_MAX_ITEMS) {
+        printf("ui_menu: page '%s' has %u items > MENU_MAX_ITEMS (%d) — "
+               "raise it in ui_menu.h\n",
+               m->title ? m->title : "?", (unsigned)m->n_items, MENU_MAX_ITEMS);
+        m->n_items = MENU_MAX_ITEMS;
+    }
+    if (m->cat_sel >= m->n_cats) {
+        m->cat_sel = 0;
+    }
+    if (m->sel >= m->n_items) {
+        m->sel = 0;
     }
     list_page_t *p = &g_pool[g_pool_n++];
     memset(p, 0, sizeof *p);

@@ -21,8 +21,9 @@ found in a brief look, so the flat look stays on the Latin side and Hebrew
 falls through in a clean sans. If a good pixel Hebrew face turns up later,
 swap this file and re-shoot the frames — nothing else changes.
 
-Font Awesome codepoints used by the shell are written as C11 `\uXXXX`
-escapes in `ui/ui_shell.c`; the authoritative name→codepoint table is
+Font Awesome codepoints used by the UI are named once, as C11 `\uXXXX`
+escapes, in `ui/ui_icons.h` (the renderer keeps its three private chevron/
+caret glyphs in `ui/ui_menu.c`); the authoritative name→codepoint table is
 `metadata/icons.json` in the Font Awesome repository (6.5.2).
 
 ## Fallback chain (Latin stays pixel-styled)
@@ -37,7 +38,13 @@ Silkscreen / VT323 / FA  ->  Droid Sans Hebrew @same px  ->  Noto Emoji @same px
 LVGL resolves a glyph through `lv_font_t.fallback` only when the base face
 reports it missing, so ASCII/Latin never leaves Silkscreen or VT323. The
 chain is attached to every UI face; the two Font Awesome faces never carry
-data text, but the uniform chain costs nothing at render time.
+data text, but the uniform chain costs nothing per glyph. What each fallback
+instance *does* cost is one tiny_ttf glyph cache
+(`LV_TINY_TTF_CACHE_GLYPH_CNT`, 128 entries, plus a 128-entry bitmap cache,
+both filled lazily) — 10 fallback instances today, see `ui-architecture.md`
+§11. A glyph that no face in the chain has makes tiny_ttf log
+`cache not allocated` (LVGL's wording for "not in this face"; the next face
+answers) — expected noise, a few hundred lines on the chat list.
 
 ## Emoji subset — how and what it costs
 

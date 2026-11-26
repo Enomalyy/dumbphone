@@ -15,14 +15,21 @@ three-tier virtualization plan: `../harness-setup.md`. What the OS becomes: `../
 ```
 main/main.c          ESP-IDF app entry (scaffold: boot + heartbeat task)
 hal/                 the HAL contract — headers only, no backends
-  hal_display.h        panel: info / blit(full RGB565 frame) / backlight / framebuffer()
+  hal_display.h        panel: info / blit_area (one dirty rectangle) / blit (full frame)
+                       / backlight / framebuffer()
   hal_input.h          touch + named keys (home, back, power, vol+/-) — never raw keycodes
   hal_net.h            WiFi sockets (stub)
   hal_storage.h        filesystem per partition (host: plain directory)
   hal_audio.h          PCM out / capture (stub)
 ui/                  the phone shell (LVGL) — target-agnostic, one thread owns it
-  ui_shell.c           frame (status/action bars), screen stack, input state machine,
-                       the HOME chat list + main menu data, options sidebar, lock screen
+  ui_shell.c           the composition root: frame (status/action bars), screen stack,
+                       key dispatch, font loading + the flush->HAL glue
+  ui_home.h/.c         HOME / chat list: the chat source resolved into per-category
+                       slices, its menu_t + keymap, category cycling
+  ui_mainmenu.h/.c     main-menu carousel/grid data, category cycling, layout sync
+  ui_sidebar.h/.c      the SHOULDER-L options overlay (rows use the shared ui_row_style)
+  ui_leaf.h/.c         the two bespoke leaves: lock screen and "coming soon" stub
+  ui_input.h/.c        HAL event pump: touch/swipe state machine, key press durations
   ui_menu.h/.c         menu_t + THE generic list/grid renderer every page uses
   ui_keymap.h/.c       action vocabulary + per-page keymaps (contextual bindings)
   ui_theme.h/.c        palette + ALL design tokens (font sizes, panel/frame/menu metrics)
@@ -71,9 +78,11 @@ Every cap fires a named HAL key exactly as the keyboard does — hit test -> `ha
 `ui_shell` — so "what a press does" lives in one place and the real GPIO keys will reuse it
 unchanged. The UI has no idea a mouse exists.
 
-Wired today: UP/DOWN move the list selection, END and shoulder-L go home, shoulder-R opens the
-menu. OK, CALL, LEFT/RIGHT, the digits and * / # already deliver their named events and are
-reserved for the app layer and the T9 composer.
+Wired today: UP/DOWN move the list selection, LEFT/RIGHT cycle the current page's category
+strip, OK opens the selected item (on HOME it opens the main menu), CALL jumps to Calls from
+HOME, END goes home (a second END on HOME locks the phone), SHOULDER-L opens the options
+sidebar and SHOULDER-R goes back. T9 1-9 are speed dials on HOME; * and # are reserved for the
+T9 composer.
 
 ```bash
 just run-desktop                      # window (auto-fits the display: 2x, else 1.5x)
@@ -82,6 +91,10 @@ just shot-window chat digit-5         # composed mock-up, holding the 5 key
 # button ids: vol-up vol-down power up down left right ok
 #             shoulder-l shoulder-r call end digit-0..digit-9 star hash
 ```
+
+`shot-desktop` frames are device pixels (the golden diffs). `shot-window` frames are the
+*host backend's* composition (bezel geometry, scaling, held keys) — re-shoot them after
+touching `host/src/hal_sdl_display.c` or `host/src/bezel.c`; nothing else verifies that path.
 
 ### Contextual keymaps
 

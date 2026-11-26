@@ -31,7 +31,11 @@ extern "C" {
 /* Largest list page: the chat list's ALL slice (UI_CHAT_MAX chats + New
  * Chat = 33). Every row array in the renderer is this size. */
 #define MENU_MAX_ITEMS 33
-#define MENU_MAX_CATS  4
+/* Widest category strip: the chat list has five (ALL · FAMILY · UNREAD ·
+ * FAVORITES · ARCHIVED); the main menu has four. Every tray-cell array in
+ * the renderer is this size — a page with more categories is clamped at
+ * build time (ui_list_build prints a message). */
+#define MENU_MAX_CATS  5
 
 /* Where a menu item's CENTER goes. The shell maps page_id_t -> a screen. */
 typedef enum {

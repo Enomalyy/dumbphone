@@ -20,13 +20,11 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stdlib.h>   /* atexit(), UI_FLUSH_STATS builds only */
 #include <time.h>
 
 #include "lvgl.h"
 
-#include "chat_model.h"
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
 #include "ui_calls.h"
@@ -145,25 +143,57 @@ static void flush_stats_summary(void)
 
 static void display_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
 {
-    /* Keep the shadow framebuffer current (frame dumps and the browser
-     * viewport read it), then present ONLY the dirty area. LVGL's draw
-     * buffer rows are packed exactly as hal_display_blit_area expects:
-     * w*2 bytes per row, no stride — so the region goes straight from the
-     * render buffer to the panel, no full-frame readback. */
-    const uint8_t *frame = hal_display_framebuffer();
-    if (!frame) {
-        lv_display_flush_ready(disp);
-        return;
-    }
+    /* Present ONLY the dirty area (audit §3.1): the full-frame shadow and the
+     * browser viewport are the backend's business — hal_display_blit_area()
+     * copies the region into the panel shadow before it presents it — so this
+     * callback is a straight region hand-off. A backend with no shadow
+     * (hal_display_framebuffer() == NULL) still displays. */
     int x = (int)area->x1;
     int y = (int)area->y1;
     int w = (int)(area->x2 - area->x1 + 1);
     int h = (int)(area->y2 - area->y1 + 1);
-    for (int ry = 0; ry < h; ry++) {
-        memcpy((uint8_t *)frame + ((size_t)(y + ry) * PANEL_W + x) * 2,
-               px + (size_t)ry * w * 2, (size_t)w * 2);
+
+    /* LVGL never asks for an area outside the display, but a bad panel/driver
+     * pairing must not become a wild write or a silent dropped frame. */
+    if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+        x + w > PANEL_W || y + h > PANEL_H) {
+        static bool area_warned;
+        if (!area_warned) {
+            area_warned = true;
+            printf("ui_shell: flush area (%d,%d %dx%d) outside the %dx%d panel "
+                   "— skipped\n", x, y, w, h, PANEL_W, PANEL_H);
+        }
+        lv_display_flush_ready(disp);
+        return;
     }
-    hal_display_blit_area(px, (uint16_t)x, (uint16_t)y, (uint16_t)w, (uint16_t)h);
+
+    /* Rows are handed over packed (w*2 bytes). LVGL's own buffer is packed
+     * while LV_DRAW_BUF_STRIDE_ALIGN is 1 (the host lv_conf), but a device
+     * lv_conf that pads rows for cache alignment would break that silently,
+     * so read the real stride and fall back to row-by-row presentation. */
+    lv_draw_buf_t *buf = lv_display_get_buf_active(disp);
+    size_t stride = (buf && buf->header.stride) ? buf->header.stride
+                                                : (size_t)w * 2;
+    int rc;
+    if (stride == (size_t)w * 2) {
+        rc = hal_display_blit_area(px, (uint16_t)x, (uint16_t)y,
+                                   (uint16_t)w, (uint16_t)h);
+    } else {
+        rc = 0;
+        for (int ry = 0; ry < h; ry++) {
+            rc |= hal_display_blit_area(px + (size_t)ry * stride,
+                                        (uint16_t)x, (uint16_t)(y + ry),
+                                        (uint16_t)w, 1);
+        }
+    }
+    if (rc != 0) {
+        static bool blit_warned;
+        if (!blit_warned) {
+            blit_warned = true;
+            printf("ui_shell: hal_display_blit_area rejected a %dx%d area at "
+                   "(%d,%d)\n", w, h, x, y);
+        }
+    }
 #ifdef UI_FLUSH_STATS
     {
         uint32_t area_px = (uint32_t)w * (uint32_t)h;
@@ -229,10 +259,6 @@ static void clock_tick_cb(lv_timer_t *timer)
     strftime(dbuf, sizeof dbuf, "%a %d %b", &tm_now);
     ui_leaf_set_lock_time(buf, dbuf);
 }
-
-/* ------------------------------------------------------------------ */
-/* Soft-key action bar (pinned bottom)                                 */
-/* ------------------------------------------------------------------ */
 
 /* ------------------------------------------------------------------ */
 /* Contextual keymaps (ui-architecture.md §1, §2, §4)                  */
@@ -314,9 +340,10 @@ static bool is_locked(void)
     return screen_stack[stack_top] == UI_SCREEN_LOCK;
 }
 
-/* Forward decls: the main-menu carousel, settings tree, speed-dial sub-
- * page, held-press sub-page + stub page live further down; the list pages
- * are all canonical (menu_t + renderer). The chat list lives in ui_home.c. */
+/* The shell's page handles. Every page is a canonical menu_t rendered by
+ * ui_menu.c; the DATA for each lives in its own module (ui_home for the
+ * chat list, ui_mainmenu for the menu, and one small module per settings/
+ * calls page). The shell only owns these pointers and the screen stack. */
 static list_page_t *g_menu = NULL;
 static list_page_t *g_settings = NULL;
 static list_page_t *g_speeddial = NULL;
@@ -568,13 +595,11 @@ static void open_page(page_id_t id)
 }
 
 /* ------------------------------------------------------------------ */
-/* Options sidebar overlay (spec §1: SHOULDER-L = options, per page)  */
+/* Options sidebar — the shell's half (spec §1: SHOULDER-L = options) */
 /*                                                                    */
-/* A flat panel over the left part of the content area showing the    */
-/* options relevant to the CURRENT page only (data from ui_options.c).*/
-/* Opens on SHOULDER-L from any page; closes on re-press, back, END,  */
-/* navigation, or after executing an option. Rows are a static pool:  */
-/* no allocation in the open/execute path.                            */
+/* The panel, its row pool and its styling live in ui_sidebar.c; this  */
+/* file owns what the panel cannot: executing the selected option's    */
+/* ACTION (navigation, so it lives here) and the sidebar's key routing.*/
 /* ------------------------------------------------------------------ */
 
 /* Swipe intent: hand it to the visible page's own gesture callback (each
