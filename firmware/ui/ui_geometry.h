@@ -40,7 +40,7 @@ bool ui_geom_softkeys(void);
 
 /* Derived layout metrics — computed from the panel size above: */
 int ui_status_h(void);    /* pinned status bar height (top)          */
-int ui_softkey_h(void);   /* pinned softkey bar height (bottom)      */
+int ui_softkey_h(void);   /* softkey bar height (bottom)             */
 int ui_content_y(void);   /* content area top edge                   */
 int ui_content_h(void);   /* content area height                     */
 int ui_row_h(void);       /* list row height (menu renderer)         */

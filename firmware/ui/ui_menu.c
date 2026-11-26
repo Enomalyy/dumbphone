@@ -31,7 +31,6 @@
 #define TRAY_Y        UI_TRAY_Y
 #define TITLE_Y       UI_TITLE_Y
 #define ROWS_Y        UI_ROWS_Y     /* item rows start (with a strip)     */
-#define ROWS_Y_NC     UI_ROWS_Y_NC  /* item rows start (no strip)         */
 #define ROW_H         UI_ROW_H
 #define ROW_INSET_X   UI_ROW_INSET_X
 #define ROW_INSET_W   UI_ROW_INSET_W
@@ -519,13 +518,20 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
         for (int i = 0; i < n; i++) {
             style_cell(p, i);
         }
+    } else if (m->title) {
+        /* No category strip, but the page still has a name. Without it two
+         * four-row settings pages are visually identical, so DISPLAY reads
+         * as a second copy of SETTINGS rather than a page inside it
+         * (Eli, 27/11). Same slot as a strip page's title. */
+        p->title_lbl = mk_center_label(p->root, m->title, ui_font_title(),
+                                       C_TEXT, TITLE_Y);
     }
 
     /* --- scrollable row area: long lists (e.g. the chat list) hold more
      * items than fit on screen; short lists simply never scroll. The box is
      * a native LVGL scroll target, so pointer drags (swipes) scroll it for
      * free once gestures are wired. */
-    int y0 = m->cats ? ROWS_Y : ROWS_Y_NC;
+    int y0 = ROWS_Y;   /* strip or title: both live in the header slot */
     p->rows_box = lv_obj_create(p->root);
     lv_obj_set_size(p->rows_box, PANEL_W, CONTENT_H - y0);
     lv_obj_set_pos(p->rows_box, 0, y0);
@@ -653,7 +659,7 @@ void ui_menu_relayout(void)
         }
         lv_obj_set_size(p->root, PANEL_W, CONTENT_H);
         if (p->rows_box) {
-            int y0 = p->m->cats ? ROWS_Y : ROWS_Y_NC;
+            int y0 = ROWS_Y;
             lv_obj_set_pos(p->rows_box, 0, y0);
             lv_obj_set_size(p->rows_box, PANEL_W, CONTENT_H - y0);
         }

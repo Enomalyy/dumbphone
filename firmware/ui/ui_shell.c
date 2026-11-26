@@ -575,6 +575,9 @@ static void update_softkeys(const keymap_t *km)
     }
 }
 
+/* HEADERS face at the cap's own size (defined with the font accessors). */
+static lv_font_t *softkey_face(void);
+
 static void build_softkey_bar(lv_obj_t *parent)
 {
     lv_obj_t *bar = lv_obj_create(parent);
@@ -609,7 +612,11 @@ static void build_softkey_bar(lv_obj_t *parent)
          * static-text swap fits the label's first layout. */
         sk_lbl[i] = lv_label_create(box);
         lv_label_set_text_static(sk_lbl[i], "OPTIONS");
-        lv_obj_set_style_text_font(sk_lbl[i], f_chrome, 0);
+        /* The caps take the HEADERS *face* (Eli, 27/11): pick Jersey for the
+         * headers and the bar follows. The size stays the bar's own — a 32 px
+         * header face cannot fit a 36 px bar without moving every frame, and
+         * the bar is a fixed-height strip by design. */
+        lv_obj_set_style_text_font(sk_lbl[i], softkey_face(), 0);
         lv_obj_set_style_text_color(sk_lbl[i], C_TEXT, 0);
         lv_obj_center(sk_lbl[i]);
     }
@@ -1170,6 +1177,16 @@ lv_font_t *ui_font_of(ui_font_role_t role)
     default:              return f_body_l;
     }
 }
+/* The HEADERS face at the cap's own size: the bar follows the chosen family
+ * without needing to grow. Falls back to the chrome face if the face cannot
+ * be loaded at that size. */
+static lv_font_t *softkey_face(void)
+{
+    ui_font_pref_t p = ui_font_pref(UI_FONT_HEADER);
+    lv_font_t *f = role_face(UI_FONT_HEADER, p.face, UI_FONT_CHROME_PX);
+    return f ? f : f_chrome;
+}
+
 lv_font_t *ui_font_icon(void)     { return f_icon; }
 lv_font_t *ui_font_icon_s(void)   { return f_icon_s; }
 
@@ -1327,6 +1344,7 @@ static void restyle_frame(void)
             lv_obj_set_style_bg_color(sk_cap[i], C_GROUND, 0);
             lv_obj_set_style_border_color(sk_cap[i], C_BORDER, 0);
             lv_obj_set_style_text_color(sk_lbl[i], C_TEXT, 0);
+            lv_obj_set_style_text_font(sk_lbl[i], softkey_face(), 0);
         }
     }
 }
@@ -1338,6 +1356,8 @@ static void restyle_frame(void)
 static void appearance_apply(void)
 {
     sync_role_fonts();
+
+
     restyle_frame();
     ui_menu_restyle();
     ui_sidebar_restyle();

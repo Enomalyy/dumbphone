@@ -472,8 +472,12 @@ A third entry under Display, beside Theme and Menu Style: *Font*, cycling the UI
 decision** — Eli tunes them himself as the design settles. So the wave ships the *mechanism* and a
 sensible default, not a finely-argued opinion about which face wins.
 
-- The choices are the body typeface; the chrome face (Silkscreen) is part of the product's identity
-  and stays fixed unless Eli says otherwise. Flag it rather than assume silently.
+- **What the Headers role owns** (Eli, 27/11): page banners *and* the soft-key caps. The caps take the
+  chosen family at the bar's own size (16 px) — a 32 px face cannot fit a 36 px bar without moving
+  every frame. The banner takes face and size; at the 32 px step it is tight against the first row,
+  so a flexible header slot is the follow-up (Stage B), not a reason to shrink the face.
+  Every list page draws its name — pages without a category strip used to draw none, which made
+  Settings and Display look like the same window twice.
 - Offer at least three faces, with the size alongside them (e.g. *Pixelify 16*, *Jersey 10*,
   *DotGothic 16*), because size affects legibility more than face does at this panel density.
 - Faces may be baked at 1bpp (crisp) or 8bpp (antialiased); both are legitimate *options* — the

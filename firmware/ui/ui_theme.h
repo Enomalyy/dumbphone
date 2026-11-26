@@ -93,7 +93,6 @@ extern "C" {
 #define UI_TRAY_CELL_H     26
 #define UI_TITLE_Y         28   /* centered category title row          */
 #define UI_ROWS_Y          54   /* rows start (page HAS a strip)        */
-#define UI_ROWS_Y_NC        2   /* rows start (page has NO strip)       */
 
 /* Grid layout (LAYOUT_GRID): the classic 3-wide app grid, one cell per item
  * in reading order. Both layouts render the same `items` data. */
