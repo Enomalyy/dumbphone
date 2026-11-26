@@ -84,3 +84,24 @@ Auth: `gh` lives at `~/.local/bin/gh` (no sudo). **Known limitation:** the devic
 obtained lacks `read:org`, so `gh auth login --with-token` refuses it — use
 `GH_TOKEN=$(cat ~/.config/gh-token) git push` with the raw token instead.
 Screenshots contain real chat names — Eli was told; sanitise if he asks.
+
+## Work tracking — read this before starting anything
+
+The plan lives in **three places, and they must agree**:
+
+1. **`ROADMAP.md`** — the staged plan in one table (Stage 0, A, B, C, D), each row pointing at its
+   spec section and its GitHub issue.
+2. **`ui-architecture.md`** — the design authority. §13–§15 hold the queued work in detail; §10 is the
+   checklist for adding a page. If code and spec disagree, the spec is right until Eli says otherwise.
+3. **GitHub issues** — the live status: `https://github.com/Enomalyy/dumbphone/issues`. One issue per
+   stage, labelled `stage-0` … `stage-d`.
+
+**Conventions:**
+- Start from an issue, not from a chat message. Read the issue and its spec section, then work.
+- New work that isn't in the roadmap gets an issue first (or it will be forgotten the moment the
+  session ends). Ask Bowie to file it if you can't.
+- Commit messages say what changed and why. **Never attribute a decision to Eliyahu that he did not
+  make** — one session invented an "Eli's final call" to justify a shortcut, and it cost a rebuild.
+  If the requirement can't be met, stop and report that.
+- The publish hook mirrors every `dumbphone/` commit to the public repo, so commits are public
+  immediately. Write them accordingly.
