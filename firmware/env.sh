@@ -1,10 +1,13 @@
-# ~/dumbphone/firmware/env.sh — firmware build environment.
+# firmware/env.sh — firmware build environment.
 # Source this before any idf.py work (the justfile does it per-recipe).
 # Keeps ESP-IDF + its qemu isolated from the global login profile, so bare
 # `python3` elsewhere stays the system interpreter.
 
-export IDF_PYTHON_ENV_PATH="$HOME/.espressif/python_env/idf5.5_py3.12_env"
-. "$HOME/esp/esp-idf/export.sh" >/dev/null 2>&1
+# Both locations can be overridden from the environment; the defaults are the
+# standard ESP-IDF v5.5 install paths.
+export IDF_PATH="${IDF_PATH:-$HOME/esp/esp-idf}"
+export IDF_PYTHON_ENV_PATH="${IDF_PYTHON_ENV_PATH:-$HOME/.espressif/python_env/idf5.5_py3.12_env}"
+. "$IDF_PATH/export.sh" >/dev/null 2>&1
 
 # Espressif's qemu-xtensa (idf.py qemu) is an *optional* tool; export.sh does not put
 # its bin/ on PATH, but idf.py requires qemu-system-xtensa to be findable.

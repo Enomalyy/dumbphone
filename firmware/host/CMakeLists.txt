@@ -22,8 +22,10 @@ option(FLUSH_STATS "instrument LVGL flushes with byte/area counters" OFF)
 add_compile_options(-Wall -Wextra -Wno-unused-parameter)
 
 # ---- dependencies ---------------------------------------------------------
-# Dev headers/libs live in a user prefix on this machine (RPMs extracted with
-# rpm2cpio by hp-nobara; no root needed). An explicit override wins:
+# SDL2 and libjpeg are searched in DEPS_PREFIX first (an optional user-space
+# prefix, e.g. RPMs extracted with rpm2cpio when you have no root), then in the
+# normal system locations. A distro install (libsdl2-dev, libjpeg-dev) needs no
+# prefix at all. Override with:
 #   cmake -DDEPS_PREFIX=/some/prefix ..
 set(DEPS_PREFIX "$ENV{HOME}/dev-deps" CACHE PATH "user-space prefix with SDL2/freetype dev files")
 
@@ -85,6 +87,7 @@ add_executable(dumbphone-desktop
     ${FW_DIR}/ui/font_pixelify_m.c
     ${FW_DIR}/ui/ui_menu.c
     ${FW_DIR}/ui/ui_options.c
+    ${FW_DIR}/ui/ui_sidebar.c
     ${FW_DIR}/ui/ui_settings.c
     ${FW_DIR}/ui/ui_speeddial.c
     ${FW_DIR}/ui/ui_heldpress.c
@@ -102,6 +105,7 @@ target_include_directories(dumbphone-desktop PRIVATE
 target_compile_definitions(dumbphone-desktop PRIVATE
     FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts"
     CHAT_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/chats.json"
+    CHAT_SAMPLE_PATH="${FW_DIR}/fixtures/chats.sample.json"
 )
 
 # Optional flush instrumentation (see `just build-desktop-stats`): counts

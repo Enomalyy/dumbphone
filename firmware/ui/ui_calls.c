@@ -97,7 +97,7 @@ typedef struct {
 
 #define N_CONTACTS ((int)(sizeof g_contacts / sizeof g_contacts[0]))
 
-/* Numbers are hyphen-free: the renderer's meta column is 100 px, and a
+/* Numbers are hyphen-free: the renderer's meta column is 104 px (UI_ROW_META_W), and a
  * hyphen is a word-break opportunity for LVGL text layout — an 11-char
  * "052-1234567" wrapped to two lines. Ten digits fit one line (verified). */
 static const contact_entry_t g_contacts[] = {

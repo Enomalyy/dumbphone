@@ -1,5 +1,6 @@
 /*
- * chat_source_json.c — desktop chat source: host/data/chats.json.
+ * chat_source_json.c — desktop chat source: host/data/chats.json, falling
+ * back to the committed fixtures/chats.sample.json.
  *
  * A tiny tolerant scanner rather than a JSON library: the file is ours, the
  * schema is fixed, and this keeps the simulator dependency-free. Unknown keys
@@ -164,10 +165,17 @@ int ui_chat_source_load(ui_chat_list_t *out)
     }
     memset(out, 0, sizeof *out);
 
+    /* Real data first (host/data/chats.json, git-ignored), then the committed
+     * sample with invented names, so a fresh clone is never empty. */
     char *text = NULL;
     if (load_file(CHAT_DATA_PATH, &text) != 0) {
-        fprintf(stderr, "[chats] cannot read %s\n", CHAT_DATA_PATH);
-        return -1;
+        if (load_file(CHAT_SAMPLE_PATH, &text) != 0) {
+            fprintf(stderr, "[chats] cannot read %s or %s\n",
+                    CHAT_DATA_PATH, CHAT_SAMPLE_PATH);
+            return -1;
+        }
+        fprintf(stderr, "[chats] %s not found, using the sample %s\n",
+                CHAT_DATA_PATH, CHAT_SAMPLE_PATH);
     }
 
     int archived = 0;

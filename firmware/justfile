@@ -8,7 +8,8 @@
 # of it out of the global login profile so bare `python3` stays the system
 # interpreter.
 
-idf_export := "$HOME/dumbphone/firmware/env.sh"
+# Resolved from this file's own directory, so the clone can live anywhere.
+idf_export := justfile_directory() + "/env.sh"
 
 # ---- ESP32-S3 target (the real device image) -----------------------------
 
@@ -42,17 +43,19 @@ vendor:
 # Configure + compile the native desktop simulator.
 build-desktop: vendor
     cmake -S host -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEPS_PREFIX={{deps_prefix}}
-    cmake --build build-host -j$(nproc)
+    cmake --build build-host --parallel
 
 # Desktop build with flush instrumentation (UI_FLUSH_STATS=1): the binary
 # prints a bytes/flush-count/largest-area summary at exit. Separate build
 # dir so the default build stays clean; off by default.
 build-desktop-stats: vendor
     cmake -S host -B build-host-stats -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEPS_PREFIX={{deps_prefix}} -DFLUSH_STATS=ON
-    cmake --build build-host-stats -j$(nproc)
+    cmake --build build-host-stats --parallel
 
 # Open the simulator window (bezelled mock-up; scale auto-fits the display).
-# Also serves the browser viewport on the tailnet (--no-server to disable).
+# Also serves the browser viewport on 127.0.0.1 (--no-server to disable).
+# To reach it from another device: DUMBPHONE_SERVER_BIND=<this machine's IP>
+# (or 0.0.0.0) just run-desktop.
 run-desktop: build-desktop
     ./build-host/dumbphone-desktop
 

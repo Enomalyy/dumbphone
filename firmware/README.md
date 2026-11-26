@@ -47,8 +47,9 @@ host/                Tier-1 desktop target ONLY (nothing here is for the S3)
   src/hal_sdl_display.c  window = bezel + the 320x480 RGB565 panel scaled into it
   src/hal_sdl_input.c    mouse->touch, key caps & keyboard->named HAL keys
   src/bezel.c            the PHYSICAL keys around the panel: one data table
-  src/chat_source_json.c chat rows from data/chats.json (the desktop source)
-  data/chats.json        real WAHA chats for simulator testing
+  src/chat_source_json.c chat rows from data/chats.json, else fixtures/chats.sample.json
+  data/chats.json        real WAHA chats for simulator testing (git-ignored)
+fixtures/chats.sample.json  invented chats, committed so a fresh clone is not empty
   src/frame_server.c     browser viewport: HTTP + WebSocket, JPEG frames, input
   src/hal_stubs.c        net/audio stubs + host-directory storage
   src/main.c             main thread = SDL pump ("Core 0"); UI thread = LVGL ("Core 1")
@@ -124,10 +125,11 @@ disagree with what the key does.
 
 ### Chat list data
 
-The list renders `host/data/chats.json` — real WAHA chats (name, last snippet, time, `mine`,
+The list renders `host/data/chats.json` if it exists, e.g. real WAHA chats (name, last snippet, time, `mine`,
 `unread`, `group`, `family`, `favorite`, and `archived_count`). That directory is git-ignored
-(host storage scratch + personal data), so **a fresh clone shows "No chats" until you put a
-file there**; the path is baked in by `host/CMakeLists.txt` (`CHAT_DATA_PATH`). Rows are generated: newest chats, then an Archived row
+(host storage scratch + personal data), so a fresh clone falls back to the committed
+`fixtures/chats.sample.json` (invented names, same schema). Both paths are baked in by
+`host/CMakeLists.txt` (`CHAT_DATA_PATH`, `CHAT_SAMPLE_PATH`). Rows are generated: newest chats, then an Archived row
 carrying the count, then New Chat. `mine` renders as a `You:` prefix, long names and snippets
 ellipsize, and `[image]` / `[voice note]` snippets render as sent — the renderer has no
 special cases. `ui/chat_model.h` is the interface; the S3 build will implement it from storage.
@@ -138,10 +140,10 @@ picks RTL/LTR per string, and the font chain renders Hebrew and emoji (see `ui-a
 ### Browser viewport (phone/tablet)
 
 `just run-desktop` also starts a small HTTP/WebSocket server so the simulator can be driven from
-another device on the tailnet — no extra dependencies beyond libjpeg:
+another device, with no extra dependencies beyond libjpeg:
 
 ```
-http://100.110.199.62:8099/          # printed at startup; --server-bind / --server-port override
+http://127.0.0.1:8099/               # printed at startup; --server-bind / --server-port override
 ```
 
 The page is a canvas showing the **composed window** (panel + bezel, so the hardware keys are
@@ -152,7 +154,9 @@ the *same* hit test as a mouse click; `{"key":"digit-5"}` presses a named key (a
 home/back/menu) and lights the cap up while held.
 
 `--no-server` disables it (the headless `--shot`/`--shot-win` paths never start it).
-If the tailnet address is not available, pass `--server-bind 0.0.0.0`.
+It binds to `127.0.0.1` by default. To reach it from a phone or tablet, bind it to an address on
+this machine (a LAN or tailnet IP) or to all interfaces: `DUMBPHONE_SERVER_BIND=0.0.0.0 just
+run-desktop`, or `--server-bind 0.0.0.0`.
 
 The keyboard mirrors every physical key: arrows = d-pad, `Enter`/`Space` = OK, `C` = call,
 `E` = end, `Q`/`[` = shoulder-L, `W`/`]` = shoulder-R, `0`-`9` = keypad, `Shift+8` = `*`,

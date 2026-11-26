@@ -1,0 +1,10 @@
+# Normalize text to LF in the repository.
+* text=auto
+
+# Shell-executed files must stay LF in the working tree too, or bash (Linux,
+# WSL) fails on the carriage returns when the repo is checked out on Windows.
+*.sh      text eol=lf
+justfile  text eol=lf
+
+*.png     binary
+*.ttf     binary
