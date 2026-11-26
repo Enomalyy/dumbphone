@@ -56,13 +56,18 @@ typedef struct {
     uint8_t     shape;   /* bezel_shape_t                    */
 } bezel_button_t;
 
-/* Geometry. scale <= 0 selects the largest clean scale that fits the display. */
-void   bezel_init(float scale);
+/* Geometry. The panel size is a runtime value (ui/ui_geometry.c); it must
+ * match the geometry set there. scale <= 0 selects the largest clean scale
+ * that fits the display. */
+void   bezel_init(int panel_w, int panel_h, float scale);
 float  bezel_scale(void);
 int    bezel_window_w(void);
 int    bezel_window_h(void);
 
-/* Where the 320x480 panel sits, in window pixels. */
+/* The runtime panel size in logical units (== ui_geom_w/h). */
+void   bezel_panel_logical(int *w, int *h);
+
+/* Where the panel sits, in window pixels. */
 void   bezel_panel_rect(int *x, int *y, int *w, int *h);
 
 /* Button table access (for hit-testing and automation). */

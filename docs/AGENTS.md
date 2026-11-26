@@ -57,6 +57,13 @@ Status (26/11): concept phase + **Phase 1 harness** (ESP-IDF v5.5.6, QEMU boots 
   `LOCK ↦ HOME ↦ menu ↦ category ↦ page` — END returns to HOME from anywhere, END×2 on HOME locks.
   Every list page is a `menu_t` on one renderer; all shared metrics and
   font sizes are tokens in `ui/ui_theme.h`. Spec §12 (HOME split + softkey legend) is BUILT.
+  **Stage 0 (spec §15, issue #1) is BUILT:** panel geometry is a runtime value —
+  `ui/ui_geometry.c` is the single source of truth (identity at 320×480, so the
+  default goldens are unchanged); `ui_theme.h`'s geometry tokens expand to it; the
+  bezel re-lays itself from it; LVGL buffers, the window and the browser viewport
+  follow it. Pick a size with `just geom=480x800 shot-desktop chat` (presets:
+  320×480, 240×320, 240×400, 320×240, 480×800, 480×640, 1280×720 + free-form) or
+  `./build-host/dumbphone-desktop --geom WxH`; non-default shots write `<name>-WxH.png`.
   Run it: `just run-desktop` (window + browser viewport on 127.0.0.1:8099 — reach it from the
   tablet with `DUMBPHONE_SERVER_BIND=0.0.0.0 just run-desktop`) · `just shot-desktop <screen>`
   (golden frame, clock frozen) · `just build-s3`.

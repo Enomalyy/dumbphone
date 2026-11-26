@@ -6,7 +6,7 @@
  *        [VOL+]                 [PWR]      <- side keys, beside the screen
  *        [VOL-]
  *      +-------------- panel --------------+
- *      |            320 x 480              |
+ *      |           W x H (runtime)         |
  *      +-----------------------------------+
  *              [ L ]   (d-pad)   [ R ]      <- shoulders flank the d-pad
  *                   [ CALL ] [ END ]
@@ -15,8 +15,12 @@
  *                   [ 7 ][ 8 ][ 9 ]
  *                   [ * ][ 0 ][ # ]
  *
- * To rearrange anything, edit `s_buttons` and the layout constants: all the
- * drawing and hit-testing below is generic.
+ * The panel size is a RUNTIME value (ui/ui_geometry.c, spec §15 / issue #1):
+ * `bezel_layout()` computes every key position from it. At the default
+ * 320x480 the result is exactly the classic table this file used to hardcode.
+ *
+ * To rearrange anything, edit `bezel_layout()`: all the drawing and
+ * hit-testing below is generic over the resulting table.
  */
 
 #include "bezel.h"
@@ -31,71 +35,87 @@
 /* Geometry (logical units: panel pixels)                             */
 /* ------------------------------------------------------------------ */
 
-#define PANEL_W      320
-#define PANEL_H      480
 #define SIDE_W       44          /* side bezels: volume + power       */
 #define TOP_H        26          /* earpiece / grille                 */
-#define BEZEL_LOG_W  (SIDE_W + PANEL_W + SIDE_W)   /* 408 */
-
-/* Lower deck, measured down from the bottom of the panel. */
-#define DPAD_CX      204         /* panel centre                        */
-#define DPAD_CY      553
 #define DPAD_R       39
-#define SHOULDER_Y   539
-#define CALLEND_Y    600
 #define CALLEND_H    28
-#define KEYPAD_Y0    636
 #define KEYPAD_KEY_W 56
 #define KEYPAD_KEY_H 32
 #define KEYPAD_GAP   5
-#define BEZEL_LOG_H  789
+
+/* Lower-deck offsets below the panel bottom, as ratios of the panel height
+ * (identity at 480): d-pad centre +47, shoulders +33, call/end +94,
+ * keypad top +130, window bottom +283. */
+#define DECK(n) ((int)lroundf((float)(ph) * (float)(n) / 480.0f))
 
 /* ------------------------------------------------------------------ */
-/* THE BUTTON TABLE — edit this to rearrange the hardware            */
+/* THE BUTTON TABLE — filled by bezel_layout() for the runtime panel  */
 /* ------------------------------------------------------------------ */
 
-static const bezel_button_t s_buttons[] = {
-    /* ---- side keys (unchanged) ---- */
-    { "vol-up",    "VOL+", NULL, HAL_KEY_VOLUME_UP,     4, 120, 36, 62, BEZEL_STYLE_SIDE,  BEZEL_SHAPE_RECT },
-    { "vol-down",  "VOL-", NULL, HAL_KEY_VOLUME_DOWN,   4, 192, 36, 62, BEZEL_STYLE_SIDE,  BEZEL_SHAPE_RECT },
-    { "power",     "PWR",  NULL, HAL_KEY_POWER,       368, 120, 36, 62, BEZEL_STYLE_POWER, BEZEL_SHAPE_RECT },
+#define BUTTON_COUNT 24
+
+static bezel_button_t s_buttons[BUTTON_COUNT];
+
+static void bezel_layout(int pw, int ph)
+{
+    const int px = SIDE_W;                    /* panel recess top-left */
+    const int py = TOP_H;
+    const int win_w = SIDE_W * 2 + pw;
+    const int vol_up_y   = py + DECK(94);
+    const int vol_down_y = py + DECK(166);
+    const int dpad_cx    = px + pw / 2;
+    const int dpad_cy    = py + ph + DECK(47);
+    const int shoulder_y = py + ph + DECK(33);
+    const int callend_y  = py + ph + DECK(94);
+    const int keypad_y0  = py + ph + DECK(130);
+    const int keypad_x0  = dpad_cx - (KEYPAD_KEY_W * 3 + KEYPAD_GAP * 2) / 2;
+    int i = 0;
+
+    /* ---- side keys ---- */
+    s_buttons[i++] = (bezel_button_t){ "vol-up",   "VOL+", NULL, HAL_KEY_VOLUME_UP,   4, vol_up_y, 36, 62, BEZEL_STYLE_SIDE,  BEZEL_SHAPE_RECT };
+    s_buttons[i++] = (bezel_button_t){ "vol-down", "VOL-", NULL, HAL_KEY_VOLUME_DOWN, 4, vol_down_y, 36, 62, BEZEL_STYLE_SIDE,  BEZEL_SHAPE_RECT };
+    s_buttons[i++] = (bezel_button_t){ "power",    "PWR",  NULL, HAL_KEY_POWER,       win_w - 40, vol_up_y, 36, 62, BEZEL_STYLE_POWER, BEZEL_SHAPE_RECT };
 
     /* ---- circular d-pad: hit rects inside the ring ---- */
     /* Cross of hit cells around the hub; w == h on the disc is its diameter,
      * so changing this row resizes the centre key. Cells stay disjoint. */
-    { "up",    NULL, NULL, HAL_KEY_UP,    DPAD_CX - 13, DPAD_CY - 39, 26, 19, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_UP    },
-    { "down",  NULL, NULL, HAL_KEY_DOWN,  DPAD_CX - 13, DPAD_CY + 20, 26, 19, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_DOWN  },
-    { "left",  NULL, NULL, HAL_KEY_LEFT,  DPAD_CX - 39, DPAD_CY - 13, 19, 26, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_LEFT  },
-    { "right", NULL, NULL, HAL_KEY_RIGHT, DPAD_CX + 20, DPAD_CY - 13, 19, 26, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_RIGHT },
-    { "ok",    "OK", NULL, HAL_KEY_OK,    DPAD_CX - 20, DPAD_CY - 20, 40, 40, BEZEL_STYLE_KEY, BEZEL_SHAPE_DISC        },
+    s_buttons[i++] = (bezel_button_t){ "up",    NULL, NULL, HAL_KEY_UP,    dpad_cx - 13, dpad_cy - 39, 26, 19, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_UP    };
+    s_buttons[i++] = (bezel_button_t){ "down",  NULL, NULL, HAL_KEY_DOWN,  dpad_cx - 13, dpad_cy + 20, 26, 19, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_DOWN  };
+    s_buttons[i++] = (bezel_button_t){ "left",  NULL, NULL, HAL_KEY_LEFT,  dpad_cx - 39, dpad_cy - 13, 19, 26, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_LEFT  };
+    s_buttons[i++] = (bezel_button_t){ "right", NULL, NULL, HAL_KEY_RIGHT, dpad_cx + 20, dpad_cy - 13, 19, 26, BEZEL_STYLE_KEY, BEZEL_SHAPE_ARROW_RIGHT };
+    s_buttons[i++] = (bezel_button_t){ "ok",    "OK", NULL, HAL_KEY_OK,    dpad_cx - 20, dpad_cy - 20, 40, 40, BEZEL_STYLE_KEY, BEZEL_SHAPE_DISC        };
 
     /* ---- shoulders flanking the d-pad ---- */
-    { "shoulder-l", "L", NULL, HAL_KEY_SHOULDER_L,  60, SHOULDER_Y, 46, 28, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "shoulder-r", "R", NULL, HAL_KEY_SHOULDER_R, 302, SHOULDER_Y, 46, 28, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
+    s_buttons[i++] = (bezel_button_t){ "shoulder-l", "L", NULL, HAL_KEY_SHOULDER_L, px + 16,      shoulder_y, 46, 28, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT };
+    s_buttons[i++] = (bezel_button_t){ "shoulder-r", "R", NULL, HAL_KEY_SHOULDER_R, px + pw - 62, shoulder_y, 46, 28, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT };
 
-    /* ---- call / end ---- */
-    { "call", "CALL", NULL, HAL_KEY_CALL,  94, CALLEND_Y, 104, CALLEND_H, BEZEL_STYLE_CALL, BEZEL_SHAPE_RECT },
-    { "end",  "END",  NULL, HAL_KEY_END,  210, CALLEND_Y, 104, CALLEND_H, BEZEL_STYLE_END,  BEZEL_SHAPE_RECT },
+    /* ---- call / end (pair centred on the panel) ---- */
+    s_buttons[i++] = (bezel_button_t){ "call", "CALL", NULL, HAL_KEY_CALL, dpad_cx - 110, callend_y, 104, CALLEND_H, BEZEL_STYLE_CALL, BEZEL_SHAPE_RECT };
+    s_buttons[i++] = (bezel_button_t){ "end",  "END",  NULL, HAL_KEY_END,  dpad_cx + 10,  callend_y, 104, CALLEND_H, BEZEL_STYLE_END,  BEZEL_SHAPE_RECT };
 
     /* ---- T9 keypad 3x4 (digit + letter cluster) ---- */
-    { "digit-1", "1", NULL,   HAL_KEY_DIGIT_1, 115, KEYPAD_Y0 + 0 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-2", "2", "ABC",  HAL_KEY_DIGIT_2, 176, KEYPAD_Y0 + 0 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-3", "3", "DEF",  HAL_KEY_DIGIT_3, 237, KEYPAD_Y0 + 0 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-
-    { "digit-4", "4", "GHI",  HAL_KEY_DIGIT_4, 115, KEYPAD_Y0 + 1 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-5", "5", "JKL",  HAL_KEY_DIGIT_5, 176, KEYPAD_Y0 + 1 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-6", "6", "MNO",  HAL_KEY_DIGIT_6, 237, KEYPAD_Y0 + 1 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-
-    { "digit-7", "7", "PQRS", HAL_KEY_DIGIT_7, 115, KEYPAD_Y0 + 2 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-8", "8", "TUV",  HAL_KEY_DIGIT_8, 176, KEYPAD_Y0 + 2 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-9", "9", "WXYZ", HAL_KEY_DIGIT_9, 237, KEYPAD_Y0 + 2 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-
-    { "star",    "*", NULL,   HAL_KEY_STAR,    115, KEYPAD_Y0 + 3 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "digit-0", "0", " ",    HAL_KEY_DIGIT_0, 176, KEYPAD_Y0 + 3 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-    { "hash",    "#", NULL,   HAL_KEY_HASH,    237, KEYPAD_Y0 + 3 * (KEYPAD_KEY_H + KEYPAD_GAP), KEYPAD_KEY_W, KEYPAD_KEY_H, BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT },
-};
-
-#define BUTTON_COUNT (sizeof(s_buttons) / sizeof(s_buttons[0]))
+    static const char *ids[12] = { "digit-1", "digit-2", "digit-3", "digit-4",
+                                   "digit-5", "digit-6", "digit-7", "digit-8",
+                                   "digit-9", "star",    "digit-0", "hash" };
+    static const char *digits[12] = { "1", "2", "3", "4", "5", "6",
+                                      "7", "8", "9", "*", "0", "#" };
+    static const char *subs[12] = { NULL, "ABC", "DEF", "GHI", "JKL", "MNO",
+                                    "PQRS", "TUV", "WXYZ", NULL, " ", NULL };
+    static const hal_key_t keys[12] = { HAL_KEY_DIGIT_1, HAL_KEY_DIGIT_2,
+                                        HAL_KEY_DIGIT_3, HAL_KEY_DIGIT_4,
+                                        HAL_KEY_DIGIT_5, HAL_KEY_DIGIT_6,
+                                        HAL_KEY_DIGIT_7, HAL_KEY_DIGIT_8,
+                                        HAL_KEY_DIGIT_9, HAL_KEY_STAR,
+                                        HAL_KEY_DIGIT_0, HAL_KEY_HASH };
+    for (int k = 0; k < 12; k++) {
+        int col = k % 3, row = k / 3;
+        s_buttons[i++] = (bezel_button_t){ ids[k], digits[k], subs[k], keys[k],
+                                           keypad_x0 + col * (KEYPAD_KEY_W + KEYPAD_GAP),
+                                           keypad_y0 + row * (KEYPAD_KEY_H + KEYPAD_GAP),
+                                           KEYPAD_KEY_W, KEYPAD_KEY_H,
+                                           BEZEL_STYLE_KEY, BEZEL_SHAPE_RECT };
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /* State                                                              */
@@ -104,6 +124,9 @@ static const bezel_button_t s_buttons[] = {
 static float s_scale = 1.0f;
 static int   s_win_w;
 static int   s_win_h;
+static int   s_pw, s_ph;      /* runtime panel size (logical units)    */
+static int   s_log_w, s_log_h; /* window size in logical units          */
+static int   s_dpad_cx, s_dpad_cy;
 
 typedef struct {
     Uint32 bg, rim, rim_hi, grille;
@@ -365,7 +388,7 @@ static const bezel_button_t *find_by_shape(int shape)
  * the key currently pressed (or -1), drawn highlighted. */
 static void draw_dpad(SDL_Surface *dst, int held)
 {
-    const int cx = DPAD_CX, cy = DPAD_CY, r = DPAD_R;
+    const int cx = s_dpad_cx, cy = s_dpad_cy, r = DPAD_R;
 
     disc(dst, cx, cy, r, s_pal.edge);
     disc(dst, cx, cy, r - 2, s_pal.face);
@@ -429,15 +452,15 @@ void bezel_draw_background(SDL_Surface *dst)
     }
     palette_init(dst->format);
 
-    rect(dst, 0, 0, BEZEL_LOG_W, BEZEL_LOG_H, s_pal.bg);
+    rect(dst, 0, 0, (float)s_log_w, (float)s_log_h, s_pal.bg);
 
     /* Recessed panel frame: dark well + a lit inner edge. */
-    rect(dst, SIDE_W - 4, TOP_H - 4, PANEL_W + 8, PANEL_H + 8, s_pal.rim);
-    rect(dst, SIDE_W - 1, TOP_H - 1, PANEL_W + 2, PANEL_H + 2, s_pal.rim_hi);
+    rect(dst, SIDE_W - 4, TOP_H - 4, (float)(s_pw + 8), (float)(s_ph + 8), s_pal.rim);
+    rect(dst, SIDE_W - 1, TOP_H - 1, (float)(s_pw + 2), (float)(s_ph + 2), s_pal.rim_hi);
 
     /* Earpiece grille. */
     for (int i = 0; i < 9; i++) {
-        rect(dst, 160 + SIDE_W - 4 * 9 + i * 9, 9, 5, 3, s_pal.grille);
+        rect(dst, SIDE_W + s_pw / 2 - 4 * 9 + i * 9, 9, 5, 3, s_pal.grille);
     }
 
     draw_dpad(dst, -1);
@@ -467,15 +490,21 @@ static float fit_scale(void)
         return 1.0f;
     }
     for (size_t i = 0; i < sizeof candidates / sizeof candidates[0]; i++) {
-        if ((float)BEZEL_LOG_H * candidates[i] + margin <= (float)usable.h) {
+        if ((float)s_log_h * candidates[i] + margin <= (float)usable.h) {
             return candidates[i];
         }
     }
     return 1.0f;
 }
 
-void bezel_init(float scale)
+void bezel_init(int panel_w, int panel_h, float scale)
 {
+    s_pw = panel_w;
+    s_ph = panel_h;
+    s_log_w = SIDE_W * 2 + s_pw;
+    s_log_h = TOP_H + s_ph + (int)lroundf((float)s_ph * 283.0f / 480.0f);
+    bezel_layout(s_pw, s_ph);
+
     if (scale <= 0.0f) {
         scale = fit_scale();
     }
@@ -486,8 +515,14 @@ void bezel_init(float scale)
         scale = 3.0f;
     }
     s_scale = scale;
-    s_win_w = (int)lroundf((float)BEZEL_LOG_W * s_scale);
-    s_win_h = (int)lroundf((float)BEZEL_LOG_H * s_scale);
+    s_win_w = (int)lroundf((float)s_log_w * s_scale);
+    s_win_h = (int)lroundf((float)s_log_h * s_scale);
+}
+
+void bezel_panel_logical(int *w, int *h)
+{
+    if (w) *w = s_pw;
+    if (h) *h = s_ph;
 }
 
 float bezel_scale(void) { return s_scale; }
@@ -498,8 +533,8 @@ void bezel_panel_rect(int *x, int *y, int *w, int *h)
 {
     if (x) *x = (int)lroundf((float)SIDE_W * s_scale);
     if (y) *y = (int)lroundf((float)TOP_H * s_scale);
-    if (w) *w = (int)lroundf((float)PANEL_W * s_scale);
-    if (h) *h = (int)lroundf((float)PANEL_H * s_scale);
+    if (w) *w = (int)lroundf((float)s_pw * s_scale);
+    if (h) *h = (int)lroundf((float)s_ph * s_scale);
 }
 
 size_t bezel_button_count(void) { return BUTTON_COUNT; }

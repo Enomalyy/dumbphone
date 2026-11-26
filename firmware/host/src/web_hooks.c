@@ -33,8 +33,8 @@ int web_key_center(const char *id, int *cx, int *cy)
     return -1;
 }
 
-/* FNV-1a over a stride sample of the 320x480 RGB565 panel. Cheap, and any
- * visible change in the UI moves the hash. */
+/* FNV-1a over a stride sample of the RGB565 panel (runtime size from
+ * ui_geometry.c). Cheap, and any visible change in the UI moves the hash. */
 EMSCRIPTEN_KEEPALIVE
 unsigned int web_frame_hash(void)
 {
@@ -42,12 +42,24 @@ unsigned int web_frame_hash(void)
     if (!fb) {
         return 0;
     }
+    hal_display_info_t info;
+    hal_display_info(&info);
     unsigned int h = 2166136261u;
-    for (int i = 0; i < 320 * 480; i += 7) {
+    for (int i = 0; i < info.width * info.height; i += 7) {
         h ^= fb[i];
         h *= 16777619u;
     }
     return h;
+}
+
+/* The composed window size in window pixels (the canvas's native size).
+ * The page uses this to fit the canvas and map taps — it must not hardcode
+ * a panel geometry (spec §15 / issue #1). */
+EMSCRIPTEN_KEEPALIVE
+int web_window_size(int *w, int *h)
+{
+    hal_display_window_size(w, h);
+    return 0;
 }
 
 /* Framebook: main.c's rAF loop notes every pumped frame, so the harness can

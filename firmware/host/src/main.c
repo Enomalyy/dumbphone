@@ -19,7 +19,7 @@
  *
  * Harness mode (no window, deterministic frame dumps; the clock is frozen
  * at 20:36 so a frame is reproducible regardless of when it was taken):
- *   dumbphone-desktop --shot out.ppm        panel only (320x480, device pixels)
+ *   dumbphone-desktop --shot out.ppm        panel only (device pixels)
  *   dumbphone-desktop --shot-win out.ppm    composed mock-up (bezel + panel)
  *   options: --screen home|chat|menu|settings|speeddials|heldpress|callhist
  *            |contacts|lock
@@ -27,6 +27,14 @@
  *            --cycle left|right N  --key <name> [N]  --activate N
  *            --swipe up|down|left|right [dist]  --tap x y  --hold <ms>
  *            --menu-style carousel|grid  --scale N  --frames N
+ *
+ * Panel geometry (spec §15 / issue #1): the panel size is a RUNTIME value,
+ * one source of truth in ui/ui_geometry.c. Pick it with:
+ *   dumbphone-desktop --geom WxH            e.g. --geom 480x800, --geom 240x320
+ * Presets: 320x480 (default), 240x320, 240x400, 320x240, 480x800, 480x640,
+ * 1280x720 — plus any free-form WxH. Everything (LVGL buffers, bars, rows,
+ * bezel, viewport, shots) derives from it; the default is pixel-identical to
+ * the pre-geometry build.
  */
 
 #include <math.h>
@@ -43,6 +51,7 @@
 #endif
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
+#include "ui/ui_geometry.h"
 #include "ui/ui_settings.h"
 #include "ui/ui_shell.h"
 
@@ -83,12 +92,14 @@ static int write_ppm(const char *path)
     if (!fb) {
         return -1;
     }
+    hal_display_info_t info;
+    hal_display_info(&info);
     FILE *f = fopen(path, "wb");
     if (!f) {
         return -1;
     }
-    fprintf(f, "P6\n%d %d\n255\n", 320, 480);
-    for (int i = 0; i < 320 * 480; i++) {
+    fprintf(f, "P6\n%d %d\n255\n", info.width, info.height);
+    for (int i = 0; i < info.width * info.height; i++) {
         uint16_t p = fb[i];
         unsigned char rgb[3] = {
             (unsigned char)(((p >> 11) & 0x1F) * 255 / 31),
@@ -250,6 +261,7 @@ int main(int argc, char **argv)
     int tap_x = 0, tap_y = 0;        /* a point touch (panel px)          */
     int hold_ms = 0;                /* how long --key presses stay down */
     const char *menu_style = NULL;   /* "carousel" | "grid"         */
+    const char *geom = NULL;          /* "WxH" panel geometry          */
     /* Loopback by default: the viewport is a dev tool and should not be
      * reachable from other machines unless asked. To drive it from a phone
      * on your LAN/tailnet, set DUMBPHONE_SERVER_BIND or pass --server-bind
@@ -312,6 +324,9 @@ int main(int argc, char **argv)
             hold_ms = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--menu-style") && i + 1 < argc) {
             menu_style = argv[++i];
+        } else if ((!strcmp(argv[i], "--geom") || !strcmp(argv[i], "--geometry"))
+                   && i + 1 < argc) {
+            geom = argv[++i];
         } else if (!strcmp(argv[i], "--scale") && i + 1 < argc) {
             scale = (float)atof(argv[++i]);
         } else if (!strcmp(argv[i], "--frames") && i + 1 < argc) {
@@ -334,7 +349,7 @@ int main(int argc, char **argv)
                     "[--swipe up|down|left|right [dist] ...] [--tap x y ...] "
                     "[--hold <ms>] "
                     "[--menu-style carousel|grid] "
-                    "[--scale N] [--frames N] "
+                    "[--geom WxH] [--scale N] [--frames N] "
                     "[--no-server] [--server-bind IP] [--server-port N] "
                     "[--server-fps N]\n", argv[0]);
             return 2;
@@ -342,6 +357,19 @@ int main(int argc, char **argv)
     }
 
     printf("[main] dumbphone desktop simulator (Tier 1, LVGL + SDL2)\n");
+
+    /* Panel geometry — the single runtime source of truth. Must be set
+     * before hal_display_init() (buffers, bezel and window size from it). */
+    if (geom) {
+        int gw = 0, gh = 0;
+        if (sscanf(geom, "%dx%d", &gw, &gh) != 2 || gw <= 0 || gh <= 0) {
+            fprintf(stderr, "[main] bad --geom '%s' (want WxH, e.g. 480x800)\n",
+                    geom);
+            return 2;
+        }
+        ui_geometry_set(gw, gh);
+    }
+    printf("[main] panel geometry: %dx%d\n", ui_geom_w(), ui_geom_h());
 
     if ((shot_path || shot_win_path) && !getenv("SDL_VIDEODRIVER")) {
         /* Headless: software surfaces still work, no window appears. */

@@ -76,9 +76,11 @@
 /* Static state (no dynamic allocation in the hot path)                */
 /* ------------------------------------------------------------------ */
 
-/* Full-frame RGB565 draw buffer (2 bytes/px). Static: no allocation in the
- * hot path, and the panel format matches LV_COLOR_FORMAT_RGB565 exactly. */
-static uint8_t draw_buf[PANEL_W * PANEL_H * 2];
+/* Full-frame RGB565 draw buffer (2 bytes/px). Heap: the panel size is a
+ * runtime value (ui_geometry.c, spec §15), so it cannot be a static array.
+ * Allocated once in ui_shell_init(); no allocation in the hot path, and the
+ * panel format matches LV_COLOR_FORMAT_RGB565 exactly. */
+static uint8_t *draw_buf;
 
 static lv_font_t *f_chrome;    /* Silkscreen — status bar, soft keys     */
 static lv_font_t *f_chrome_s;  /* Silkscreen small — tabs                */
@@ -1006,9 +1008,16 @@ int ui_shell_init(void)
                PANEL_W, PANEL_H);
     }
 
+    draw_buf = malloc((size_t)PANEL_W * PANEL_H * 2);
+    if (!draw_buf) {
+        printf("ui_shell: draw buffer allocation failed\n");
+        return -1;
+    }
+
     lv_display_t *disp = lv_display_create(PANEL_W, PANEL_H);
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_buffers(disp, draw_buf, NULL, sizeof draw_buf,
+    lv_display_set_buffers(disp, draw_buf, NULL,
+                           (size_t)PANEL_W * PANEL_H * 2,
                            LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(disp, display_flush_cb);
 

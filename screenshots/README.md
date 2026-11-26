@@ -44,6 +44,15 @@ Composed frames (`shot-window`, bezel + panel, `--scale 1`): `window-chat`, `win
 backend** (`host/src/hal_sdl_display.c`: region compose/present, scaling, held keys), which no
 panel frame covers — re-shoot them after touching that file or `host/src/bezel.c`.
 
+Geometry frames (spec §15 / issue #1): the panel size is a runtime value
+(`firmware/ui/ui_geometry.c`), picked with the `geom` justfile variable:
+`just geom=480x800 shot-desktop chat`. Non-default geometries write
+`<name>-WxH.png` so the default goldens above are never clobbered. The set here:
+`home|chat|menu` at 240×320, 240×400, 320×240, 480×800, 480×640, 1280×720 and the
+free-form 200×350, plus `window-home-480x800` / `window-chat-digit-5-240x320`
+(bezel re-layout at those sizes). Acceptance bar: legible, no crash, nothing
+drawn outside the panel — not pixel-perfect at every size.
+
 Regenerate everything above, then compare pixels (not bytes: magick re-encodes):
 
 ```sh

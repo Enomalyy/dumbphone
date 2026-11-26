@@ -32,6 +32,13 @@ lvgl_tag := "v9.4.0"
 window_scale := "1"     # presentation scale for the mock-up (panel + bezel)
 deps_prefix := env_var_or_default("DEPS_PREFIX", env_var("HOME") + "/dev-deps")
 
+# Runtime panel geometry for shots (spec §15 / issue #1). Override on the
+# command line: just geom=480x800 shot-desktop chat. Presets: 320x480
+# (default), 240x320, 240x400, 320x240, 480x800, 480x640, 1280x720 — or any
+# free-form WxH. Non-default values write <name>-WxH.png so the default
+# goldens are never clobbered.
+geom := "320x480"
+
 # Fetch the pinned LVGL tree (idempotent).
 vendor:
     @if [ -f vendor/lvgl/lvgl.h ]; then \
@@ -68,8 +75,10 @@ run-desktop: build-desktop
 build-web:
     ../web/build.sh
 
-# Harness target: headless PANEL frame (320x480 device pixels) for golden diffs.
-# Shot mode freezes the clock at 20:36, so frames are reproducible at any time.
+# Harness target: headless PANEL frame (device pixels) for golden diffs.
+# Panel geometry comes from the geom variable (see top of file):
+# just geom=480x800 shot-desktop chat. Shot mode freezes the clock at 20:36,
+# so frames are reproducible at any time.
 # screens: chat|menu|settings|speeddials|heldpress|callhist|contacts|stub|lock.
 # cycledir/cyclen inject d-pad presses before the shot, to land a carousel
 # category (e.g. just shot-desktop chat right 1 -> FAMILY). cyclen=0 = none.
@@ -91,10 +100,11 @@ build-web:
 # selecting/executing whatever row sits there.
 shot-desktop screen="chat" cycledir="none" cyclen="0" activate="0" menustyle="auto": build-desktop
     @mkdir -p ../screenshots build-host/shots
-    ./build-host/dumbphone-desktop --shot build-host/shots/{{screen}}.ppm --screen {{screen}}{{ if cycledir != "none" { " --cycle " + cycledir + " " + cyclen } else { "" } }}{{ if activate != "0" { " --activate " + activate } else { "" } }}{{ if menustyle != "auto" { " --menu-style " + menustyle } else { "" } }}
+    ./build-host/dumbphone-desktop --shot build-host/shots/{{screen}}.ppm --screen {{screen}}{{ if cycledir != "none" { " --cycle " + cycledir + " " + cyclen } else { "" } }}{{ if activate != "0" { " --activate " + activate } else { "" } }}{{ if menustyle != "auto" { " --menu-style " + menustyle } else { "" } }} --geom {{geom}}
     @if command -v magick >/dev/null 2>&1; then \
-        magick build-host/shots/{{screen}}.ppm ../screenshots/{{ if menustyle == "auto" { screen } else { screen + "-" + menustyle } }}.png; \
-        echo "wrote ../screenshots/{{ if menustyle == "auto" { screen } else { screen + "-" + menustyle } }}.png"; \
+        name="{{ if menustyle == "auto" { screen } else { screen + "-" + menustyle } }}{{ if geom != "320x480" { "-" + geom } else { "" } }}.png"; \
+        magick build-host/shots/{{screen}}.ppm "../screenshots/$name"; \
+        echo "wrote ../screenshots/$name"; \
     else \
         echo "wrote build-host/shots/{{screen}}.ppm (install ImageMagick for PNG)"; \
     fi
@@ -103,12 +113,15 @@ shot-desktop screen="chat" cycledir="none" cyclen="0" activate="0" menustyle="au
 # press = a button id from host/src/bezel.c: vol-up|vol-down|power|up|down|left|right|ok|
 #         shoulder-l|shoulder-r|call|end|digit-0..digit-9|star|hash
 # The file name records both, e.g. window-chat-soft-right.png (MENU held, menu open).
+# The geom variable re-lays the bezel for that panel size (same presets as
+# shot-desktop); non-default geometries write window-<name>-WxH.png.
 shot-window screen="chat" press="none": build-desktop
     @mkdir -p ../screenshots build-host/shots
-    ./build-host/dumbphone-desktop --shot-win build-host/shots/window.ppm --screen {{screen}} --press {{press}} --scale {{window_scale}}
+    ./build-host/dumbphone-desktop --shot-win build-host/shots/window.ppm --screen {{screen}} --press {{press}} --scale {{window_scale}} --geom {{geom}}
     @if command -v magick >/dev/null 2>&1; then \
-        magick build-host/shots/window.ppm ../screenshots/window-{{ if press == "none" { screen } else { screen + "-" + press } }}.png; \
-        echo "wrote ../screenshots/window-{{ if press == "none" { screen } else { screen + "-" + press } }}.png"; \
+        name="window-{{ if press == "none" { screen } else { screen + "-" + press } }}{{ if geom != "320x480" { "-" + geom } else { "" } }}.png"; \
+        magick build-host/shots/window.ppm "../screenshots/$name"; \
+        echo "wrote ../screenshots/$name"; \
     else \
         echo "wrote build-host/shots/window.ppm"; \
     fi

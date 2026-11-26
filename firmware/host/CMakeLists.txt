@@ -80,6 +80,7 @@ add_executable(dumbphone-desktop
     ${FW_DIR}/ui/ui_mainmenu.c
     ${FW_DIR}/ui/ui_sidebar.c
     ${FW_DIR}/ui/ui_keymap.c
+    ${FW_DIR}/ui/ui_geometry.c
     ${FW_DIR}/ui/ui_theme.c
     ${FW_DIR}/ui/ui_text.c
     ${FW_DIR}/ui/font_pixelify_m.c

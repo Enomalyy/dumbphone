@@ -1,9 +1,9 @@
 /*
  * hal_sdl_display.c — Tier-1 (desktop) backend for hal/hal_display.h.
  *
- * The window shows a phone mock-up: the 320x480 RGB565 panel (the ONLY thing
- * the HAL knows about) surrounded by a bezel carrying the physical keys, see
- * bezel.c. Presentation is: compose bezel background -> scale the panel into
+ * The window shows a phone mock-up: the runtime-sized RGB565 panel (the ONLY
+ * thing the HAL knows about — its size comes from ui/ui_geometry.c via the
+ * bezel) surrounded by a bezel carrying the physical keys, see bezel.c. Presentation is: compose bezel background -> scale the panel into
  * its recess -> re-draw any held key -> blit to the window.
  *
  * hal_display_framebuffer() keeps returning the pure panel buffer, so frame
@@ -13,16 +13,17 @@
 #include <SDL2/SDL.h>
 
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "bezel.h"
 #include "hal/hal_display.h"
 #include "hal_sdl_host.h"
+#include "ui/ui_geometry.h"
 
-#define FB_W    320
-#define FB_H    480
-
-static uint16_t frame[FB_W * FB_H];   /* canonical panel buffer, RGB565 */
+static uint16_t *frame;               /* canonical panel buffer, RGB565 */
+static int s_fb_w, s_fb_h;            /* runtime panel size (device px)  */
 static SDL_Window *window;
 static SDL_Surface *fb_surface;       /* wraps `frame`, zero-copy */
 static SDL_Surface *compose;          /* window-sized ARGB8888 composition */
@@ -49,12 +50,25 @@ int hal_display_init(void)
         return -1;
     }
 
-    bezel_init(requested_scale);
+    /* The panel size is a runtime value — ui_geometry.c is the single
+     * source of truth (spec §15 / issue #1). */
+    s_fb_w = ui_geom_w();
+    s_fb_h = ui_geom_h();
+    frame = malloc((size_t)s_fb_w * s_fb_h * sizeof(uint16_t));
+    if (!frame) {
+        SDL_Log("panel framebuffer allocation failed");
+        return -1;
+    }
+
+    bezel_init(s_fb_w, s_fb_h, requested_scale);
 
     int win_w = bezel_window_w();
     int win_h = bezel_window_h();
 
-    window = SDL_CreateWindow("dumbphone — 320x480 panel + bezel",
+    char title[96];
+    snprintf(title, sizeof title, "dumbphone — %dx%d panel + bezel",
+             s_fb_w, s_fb_h);
+    window = SDL_CreateWindow(title,
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               win_w, win_h, SDL_WINDOW_SHOWN);
     if (!window) {
@@ -77,15 +91,15 @@ int hal_display_init(void)
     }
     bezel_draw_background(bezel_bg);
 
-    fb_surface = SDL_CreateRGBSurfaceFrom(frame, FB_W, FB_H, 16, FB_W * 2,
-                                          0xF800, 0x07E0, 0x001F, 0);
+    fb_surface = SDL_CreateRGBSurfaceFrom(frame, s_fb_w, s_fb_h, 16,
+                                          s_fb_w * 2, 0xF800, 0x07E0, 0x001F, 0);
     if (!fb_surface) {
         SDL_Log("SDL_CreateRGBSurfaceFrom failed: %s", SDL_GetError());
         return -1;
     }
 
-    SDL_Log("desktop simulator: panel 320x480, bezel x%.2f -> window %dx%d",
-            (double)bezel_scale(), win_w, win_h);
+    SDL_Log("desktop simulator: panel %dx%d, bezel x%.2f -> window %dx%d",
+            s_fb_w, s_fb_h, (double)bezel_scale(), win_w, win_h);
 
     /* Prime the composition. hal_display_blit_area() only re-composes the
      * dirty recess region (that is the whole point of the region blit), so
@@ -96,8 +110,8 @@ int hal_display_init(void)
 
 void hal_display_info(hal_display_info_t *out)
 {
-    out->width = FB_W;
-    out->height = FB_H;
+    out->width = s_fb_w;
+    out->height = s_fb_h;
     out->bpp = 16;
 }
 
@@ -120,11 +134,11 @@ static int compose_and_present(const SDL_Rect *panel_area)
     int px, py, pw, ph;
     bezel_panel_rect(&px, &py, &pw, &ph);
     const SDL_Rect *src = panel_area ? panel_area
-                                     : &(const SDL_Rect){0, 0, FB_W, FB_H};
-    const int sx0 = (int)(((uint64_t)src->x * pw) / FB_W);
-    const int sy0 = (int)(((uint64_t)src->y * ph) / FB_H);
-    const int sx1 = (int)(((uint64_t)(src->x + src->w) * pw) / FB_W);
-    const int sy1 = (int)(((uint64_t)(src->y + src->h) * ph) / FB_H);
+                                     : &(const SDL_Rect){0, 0, s_fb_w, s_fb_h};
+    const int sx0 = (int)(((uint64_t)src->x * pw) / s_fb_w);
+    const int sy0 = (int)(((uint64_t)src->y * ph) / s_fb_h);
+    const int sx1 = (int)(((uint64_t)(src->x + src->w) * pw) / s_fb_w);
+    const int sy1 = (int)(((uint64_t)(src->y + src->h) * ph) / s_fb_h);
     SDL_Rect dst;
     dst.x = px + sx0;
     dst.y = py + sy0;
@@ -166,14 +180,14 @@ int hal_display_blit_area(const void *pixels, uint16_t x, uint16_t y,
     if (!window || !fb_surface || !compose || !gfx_lock || !pixels) {
         return -1;
     }
-    if (w == 0 || h == 0 || x + w > FB_W || y + h > FB_H) {
+    if (w == 0 || h == 0 || x + w > s_fb_w || y + h > s_fb_h) {
         return -1;
     }
     int rc;
     SDL_LockMutex(gfx_lock);
     const uint8_t *src = (const uint8_t *)pixels;
     for (uint16_t ry = 0; ry < h; ry++) {
-        memcpy(&frame[(size_t)(y + ry) * FB_W + x], src + (size_t)ry * w * 2,
+        memcpy(&frame[(size_t)(y + ry) * s_fb_w + x], src + (size_t)ry * w * 2,
                (size_t)w * 2);
     }
     SDL_Rect area = { x, y, w, h };
@@ -184,10 +198,10 @@ int hal_display_blit_area(const void *pixels, uint16_t x, uint16_t y,
 
 int hal_display_blit(const void *pixels, size_t len_bytes)
 {
-    if (len_bytes < sizeof frame) {
+    if (len_bytes < (size_t)s_fb_w * s_fb_h * sizeof(uint16_t)) {
         return -1;
     }
-    return hal_display_blit_area(pixels, 0, 0, FB_W, FB_H);
+    return hal_display_blit_area(pixels, 0, 0, s_fb_w, s_fb_h);
 }
 
 int hal_display_set_backlight(uint8_t percent)
@@ -240,6 +254,8 @@ bool hal_display_quit_requested(void)
 
 void hal_display_shutdown(void)
 {
+    free(frame);
+    frame = NULL;
     if (fb_surface) {
         SDL_FreeSurface(fb_surface);
         fb_surface = NULL;

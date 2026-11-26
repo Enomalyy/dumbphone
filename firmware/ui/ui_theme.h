@@ -28,6 +28,7 @@
 #pragma once
 
 #include "lvgl.h"
+#include "ui/ui_geometry.h"   /* runtime panel geometry (spec §15) */
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,11 +39,17 @@ extern "C" {
 /* ================================================================== */
 
 /* Panel + stable frame (ui-architecture.md §1: status bar pinned top,
- * action bar pinned bottom; only the content area swaps). */
-#define UI_PANEL_W        320
-#define UI_PANEL_H        480
-#define UI_STATUS_H        26   /* status bar height                    */
-#define UI_SOFTKEY_H       36   /* soft-key action bar height           */
+ * action bar pinned bottom; only the content area swaps).
+ *
+ * The panel size and the derived bar/content/row metrics are RUNTIME
+ * values from ui_geometry.c — the single source of truth (spec §15 /
+ * issue #1). The macros expand to function calls: usable anywhere a value
+ * is needed, never as array sizes or compile-time constants. Every formula
+ * is identity at the default 320x480, so the default build is unchanged. */
+#define UI_PANEL_W        ui_geom_w()
+#define UI_PANEL_H        ui_geom_h()
+#define UI_STATUS_H       ui_status_h()    /* status bar height         */
+#define UI_SOFTKEY_H      ui_softkey_h()   /* soft-key action bar height */
 
 /* Softkey caps (spec §12.2): one per mirrored physical key — left under
  * SHOULDER-L, centre under OK, right under SHOULDER-R. */
@@ -50,13 +57,13 @@ extern "C" {
 #define UI_SK_CAP_PITCH  104   /* cap left-edge to cap left-edge       */
 #define UI_SK_CAP_INSET    6   /* first cap's inset from the bar edge  */
 #define UI_SK_CAP_TOP      5   /* cap top inset within the bar         */
-#define UI_CONTENT_Y  UI_STATUS_H
-#define UI_CONTENT_H  (UI_PANEL_H - UI_STATUS_H - UI_SOFTKEY_H)   /* 418 */
+#define UI_CONTENT_Y  ui_content_y()
+#define UI_CONTENT_H  ui_content_h()
 
 /* List pages — the generic menu_t renderer (ui_menu.c). A row is the unit
  * of every list page: the chat list, the settings tree, the config
  * sub-pages, call history and contacts all use it. */
-#define UI_ROW_H           55   /* one list row (two-line capable)      */
+#define UI_ROW_H           ui_row_h()   /* one list row (runtime)       */
 #define UI_ROW_INSET_X      4   /* row inset from the panel's left edge */
 #define UI_ROW_INSET_W      8   /* row width = UI_PANEL_W - this        */
 
@@ -85,13 +92,13 @@ extern "C" {
 /* Grid layout (LAYOUT_GRID): the classic 3-wide app grid, one cell per item
  * in reading order. Both layouts render the same `items` data. */
 #define UI_GRID_COLS        3
-#define UI_GRID_CELL_W (UI_PANEL_W / UI_GRID_COLS)
+#define UI_GRID_CELL_W ((ui_geom_w()) / UI_GRID_COLS)
 #define UI_GRID_ROW_H      84   /* icon + up-to-two-line label         */
 
 /* Options sidebar overlay (ui_sidebar.c). */
-#define UI_SIDEBAR_W      190
+#define UI_SIDEBAR_W      ui_sidebar_w()     /* runtime               */
 #define UI_SIDEBAR_ROWS_Y  34
-#define UI_SIDEBAR_ROW_H   40
+#define UI_SIDEBAR_ROW_H  ui_sidebar_row_h() /* runtime               */
 #define UI_SIDEBAR_ROWS_MAX 8   /* more than any page's table holds    */
 
 /* HOME screen (ui_home.c): the widget row + wallpaper motif. The card
@@ -101,7 +108,7 @@ extern "C" {
 #define UI_HOME_WIDGET_H     54   /* one card: label over value        */
 #define UI_HOME_WIDGET_INSET 11   /* from the panel edges              */
 #define UI_HOME_WIDGET_GAP    5   /* between cards                     */
-#define UI_HOME_CARD_W ((UI_PANEL_W - 2 * UI_HOME_WIDGET_INSET - 2 * UI_HOME_WIDGET_GAP) / 3)
+#define UI_HOME_CARD_W ui_home_card_w()
 #define UI_HOME_MOTIF_Y     150   /* wallpaper phone glyph, centred    */
 #define UI_HOME_HINT_Y      372   /* key affordance line above the bar */
 
