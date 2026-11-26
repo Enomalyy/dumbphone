@@ -90,6 +90,11 @@ subtext uses, 1bpp is the small option §14.12 allows.
 | Jersey 10 | 77,732 | 3,375 | 4,264 | 6,898 | 11,716 |
 | DotGothic16 | 86,296 | 3,674 | 5,378 | 9,948 | 17,719 |
 
+The S3 image does not carry an assets filesystem yet (the UI links into the
+IDF build at R5, spec §16.5), so these are the costs the directory will add
+when it does — reported per face now, as §14.12 asks, so the choice is made
+with numbers rather than impressions.
+
 So: a baked ASCII font costs 3-18 KiB per (face, size); the runtime TTFs cost
 their file size once and give every size for free (the S3 keeps them in the
 assets filesystem). DotGothic16 is subset to Latin-1 here (2,069,236 B →
