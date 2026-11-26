@@ -25,6 +25,12 @@
 #include "ui_shell.h"      /* ui_shell_battery_pct()      */
 #include "ui_theme.h"
 
+/* Colours are ROLES (ui_theme.h); the theme table owns the values. */
+#define C_GROUND      ui_color(UI_ROLE_GROUND)
+#define C_BORDER      ui_color(UI_ROLE_BORDER)
+#define C_TEXT        ui_color(UI_ROLE_TEXT)
+#define C_TEXT_DIM    ui_color(UI_ROLE_TEXT_DIM)
+
 static lv_obj_t *g_root;
 static lv_obj_t *g_date_val;    /* widget value labels (updated at runtime) */
 static lv_obj_t *g_unread_val;
@@ -48,22 +54,20 @@ static const keymap_t km_home = {
 static lv_obj_t *widget_card(lv_obj_t *parent, int x, const char *label,
                              const char *value)
 {
-    const ui_palette_t *pal = ui_palette();
-
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, UI_HOME_CARD_W, UI_HOME_WIDGET_H);
     lv_obj_set_pos(card, x, UI_HOME_WIDGET_Y);
     lv_obj_remove_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(card, pal->bg, 0);
+    lv_obj_set_style_bg_color(card, C_GROUND, 0);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(card, pal->border, 0);
+    lv_obj_set_style_border_color(card, C_BORDER, 0);
     lv_obj_set_style_border_width(card, 2, 0);
     lv_obj_set_style_radius(card, 0, 0);
 
     lv_obj_t *lbl = lv_label_create(card);
     lv_label_set_text(lbl, label);
     lv_obj_set_style_text_font(lbl, ui_font_chrome_s(), 0);
-    lv_obj_set_style_text_color(lbl, pal->text_dim, 0);
+    lv_obj_set_style_text_color(lbl, C_TEXT_DIM, 0);
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_remove_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(lbl, LV_ALIGN_TOP_MID, 0, 6);
@@ -71,7 +75,7 @@ static lv_obj_t *widget_card(lv_obj_t *parent, int x, const char *label,
     lv_obj_t *val = lv_label_create(card);
     lv_label_set_text(val, value);
     lv_obj_set_style_text_font(val, ui_font_body_m(), 0);
-    lv_obj_set_style_text_color(val, pal->text, 0);
+    lv_obj_set_style_text_color(val, C_TEXT, 0);
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_remove_flag(val, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(val, LV_ALIGN_TOP_MID, 0, 28);
@@ -81,7 +85,6 @@ static lv_obj_t *widget_card(lv_obj_t *parent, int x, const char *label,
 
 lv_obj_t *ui_home_build(lv_obj_t *parent)
 {
-    const ui_palette_t *pal = ui_palette();
     char buf[16];
 
     g_root = lv_obj_create(parent);
@@ -89,7 +92,7 @@ lv_obj_t *ui_home_build(lv_obj_t *parent)
     lv_obj_set_pos(g_root, 0, 0);
     lv_obj_remove_flag(g_root, LV_OBJ_FLAG_SCROLLABLE);
     /* The wallpaper base is the flat panel bg — no gradient, no image. */
-    lv_obj_set_style_bg_color(g_root, pal->bg, 0);
+    lv_obj_set_style_bg_color(g_root, C_GROUND, 0);
     lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
 
     /* Wallpaper motif: one dim phone glyph, centred between the widget row
@@ -98,7 +101,7 @@ lv_obj_t *ui_home_build(lv_obj_t *parent)
     lv_obj_t *motif = lv_label_create(g_root);
     lv_label_set_text(motif, I_PHONE);
     lv_obj_set_style_text_font(motif, ui_font_icon(), 0);
-    lv_obj_set_style_text_color(motif, pal->text_dim, 0);
+    lv_obj_set_style_text_color(motif, C_TEXT_DIM, 0);
     lv_obj_remove_flag(motif, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(motif, LV_ALIGN_TOP_MID, 0, UI_HOME_MOTIF_Y);
 
@@ -122,7 +125,7 @@ lv_obj_t *ui_home_build(lv_obj_t *parent)
     lv_obj_t *hint = lv_label_create(g_root);
     lv_label_set_text(hint, "OK: MENU  ·  END: LOCK");
     lv_obj_set_style_text_font(hint, ui_font_chrome_s(), 0);
-    lv_obj_set_style_text_color(hint, pal->text_dim, 0);
+    lv_obj_set_style_text_color(hint, C_TEXT_DIM, 0);
     lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_remove_flag(hint, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, UI_HOME_HINT_Y);

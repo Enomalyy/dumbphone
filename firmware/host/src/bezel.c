@@ -289,33 +289,76 @@ static void text_centered(SDL_Surface *s, float cx, float cy, const char *text,
     }
 }
 
+/* THE bezel colour table. The device shell is NOT the screen, so it has its
+ * own palette — but like the UI's (ui/ui_theme.c) it is ONE table of values:
+ * a colour may not appear anywhere else in this file (or this tree; the
+ * check-colours build gate enforces both files). */
+enum {
+    BEZEL_BG, BEZEL_RIM, BEZEL_RIM_HI, BEZEL_GRILLE, BEZEL_FACE, BEZEL_EDGE,
+    BEZEL_LIP, BEZEL_LABEL, BEZEL_LABEL_DIM,
+    BEZEL_P_FACE, BEZEL_P_EDGE, BEZEL_P_LABEL,
+    BEZEL_CALL_FACE, BEZEL_CALL_EDGE, BEZEL_CALL_P_FACE, BEZEL_CALL_P_EDGE,
+    BEZEL_END_FACE, BEZEL_END_EDGE, BEZEL_END_P_FACE, BEZEL_END_P_EDGE,
+    BEZEL_COLOUR_N
+};
+
+static const uint32_t k_bezel_rgb[BEZEL_COLOUR_N] = {
+    [BEZEL_BG]          = 0x0C110E,   /* desk behind the phone          */
+    [BEZEL_RIM]         = 0x222C26,
+    [BEZEL_RIM_HI]      = 0x4A5D50,
+    [BEZEL_GRILLE]      = 0x3A473E,   /* speaker slots                  */
+    [BEZEL_FACE]        = 0x273029,   /* plastic                        */
+    [BEZEL_EDGE]        = 0x6E8272,   /* plastic edge highlight         */
+    [BEZEL_LIP]         = 0x060907,   /* the recess around the panel    */
+    [BEZEL_LABEL]       = 0xD8E2D6,   /* key legends                    */
+    [BEZEL_LABEL_DIM]   = 0x8FA391,
+    [BEZEL_P_FACE]      = 0x2E6B3A,   /* pressed: OK / d-pad centre     */
+    [BEZEL_P_EDGE]      = 0x59D95F,
+    [BEZEL_P_LABEL]     = 0xEAF6E7,
+    [BEZEL_CALL_FACE]   = 0x274A2E,   /* CALL key                       */
+    [BEZEL_CALL_EDGE]   = 0x59D95F,
+    [BEZEL_CALL_P_FACE] = 0x3E8C4C,
+    [BEZEL_CALL_P_EDGE] = 0x7CFF84,
+    [BEZEL_END_FACE]    = 0x4A2424,   /* END / power key                */
+    [BEZEL_END_EDGE]    = 0xC05050,
+    [BEZEL_END_P_FACE]  = 0x7A3232,
+    [BEZEL_END_P_EDGE]  = 0xE86A6A,
+};
+
+static Uint32 bezel_colour(SDL_PixelFormat *fmt, int i)
+{
+    uint32_t hex = k_bezel_rgb[i];
+    return SDL_MapRGB(fmt, (uint8_t)(hex >> 16), (uint8_t)(hex >> 8),
+                      (uint8_t)hex);
+}
+
 static void palette_init(SDL_PixelFormat *fmt)
 {
     if (s_pal_ready) {
         return;
     }
-    s_pal.bg        = SDL_MapRGB(fmt, 0x0C, 0x11, 0x0E);
-    s_pal.rim       = SDL_MapRGB(fmt, 0x22, 0x2C, 0x26);
-    s_pal.rim_hi    = SDL_MapRGB(fmt, 0x4A, 0x5D, 0x50);
-    s_pal.grille    = SDL_MapRGB(fmt, 0x3A, 0x47, 0x3E);
-    s_pal.face      = SDL_MapRGB(fmt, 0x27, 0x30, 0x29);
-    s_pal.edge      = SDL_MapRGB(fmt, 0x6E, 0x82, 0x72);
-    s_pal.lip       = SDL_MapRGB(fmt, 0x06, 0x09, 0x07);
-    s_pal.label     = SDL_MapRGB(fmt, 0xD8, 0xE2, 0xD6);
-    s_pal.label_dim = SDL_MapRGB(fmt, 0x8F, 0xA3, 0x91);
-    s_pal.p_face    = SDL_MapRGB(fmt, 0x2E, 0x6B, 0x3A);
-    s_pal.p_edge    = SDL_MapRGB(fmt, 0x59, 0xD9, 0x5F);
-    s_pal.p_label   = SDL_MapRGB(fmt, 0xEA, 0xF6, 0xE7);
+    s_pal.bg        = bezel_colour(fmt, BEZEL_BG);
+    s_pal.rim       = bezel_colour(fmt, BEZEL_RIM);
+    s_pal.rim_hi    = bezel_colour(fmt, BEZEL_RIM_HI);
+    s_pal.grille    = bezel_colour(fmt, BEZEL_GRILLE);
+    s_pal.face      = bezel_colour(fmt, BEZEL_FACE);
+    s_pal.edge      = bezel_colour(fmt, BEZEL_EDGE);
+    s_pal.lip       = bezel_colour(fmt, BEZEL_LIP);
+    s_pal.label     = bezel_colour(fmt, BEZEL_LABEL);
+    s_pal.label_dim = bezel_colour(fmt, BEZEL_LABEL_DIM);
+    s_pal.p_face    = bezel_colour(fmt, BEZEL_P_FACE);
+    s_pal.p_edge    = bezel_colour(fmt, BEZEL_P_EDGE);
+    s_pal.p_label   = bezel_colour(fmt, BEZEL_P_LABEL);
 
-    s_pal.call_face   = SDL_MapRGB(fmt, 0x27, 0x4A, 0x2E);
-    s_pal.call_edge   = SDL_MapRGB(fmt, 0x59, 0xD9, 0x5F);
-    s_pal.call_p_face = SDL_MapRGB(fmt, 0x3E, 0x8C, 0x4C);
-    s_pal.call_p_edge = SDL_MapRGB(fmt, 0x7C, 0xFF, 0x84);
+    s_pal.call_face   = bezel_colour(fmt, BEZEL_CALL_FACE);
+    s_pal.call_edge   = bezel_colour(fmt, BEZEL_CALL_EDGE);
+    s_pal.call_p_face = bezel_colour(fmt, BEZEL_CALL_P_FACE);
+    s_pal.call_p_edge = bezel_colour(fmt, BEZEL_CALL_P_EDGE);
 
-    s_pal.end_face    = SDL_MapRGB(fmt, 0x4A, 0x24, 0x24);
-    s_pal.end_edge    = SDL_MapRGB(fmt, 0xC0, 0x50, 0x50);
-    s_pal.end_p_face  = SDL_MapRGB(fmt, 0x7A, 0x32, 0x32);
-    s_pal.end_p_edge  = SDL_MapRGB(fmt, 0xE8, 0x6A, 0x6A);
+    s_pal.end_face    = bezel_colour(fmt, BEZEL_END_FACE);
+    s_pal.end_edge    = bezel_colour(fmt, BEZEL_END_EDGE);
+    s_pal.end_p_face  = bezel_colour(fmt, BEZEL_END_P_FACE);
+    s_pal.end_p_edge  = bezel_colour(fmt, BEZEL_END_P_EDGE);
 
     s_pal_ready = true;
 }

@@ -61,14 +61,15 @@
 /* Palette — resolved through the theme layer (ui-architecture.md §5).   */
 /* The values live in ui_theme.c; these aliases keep call sites readable. */
 
-#define C_BG        (ui_palette()->bg)
-#define C_BG_ALT    (ui_palette()->bg_alt)
-#define C_SEL       (ui_palette()->sel)
-#define C_SEL_EDGE  (ui_palette()->sel_edge)
-#define C_CYAN      (ui_palette()->cyan)
-#define C_TEXT      (ui_palette()->text)
-#define C_TEXT_DIM  (ui_palette()->text_dim)
-#define C_BORDER    (ui_palette()->border)
+#define C_GROUND      ui_color(UI_ROLE_GROUND)
+#define C_SURFACE     ui_color(UI_ROLE_SURFACE)
+#define C_BORDER      ui_color(UI_ROLE_BORDER)
+#define C_TEXT        ui_color(UI_ROLE_TEXT)
+#define C_TEXT_DIM    ui_color(UI_ROLE_TEXT_DIM)
+#define C_ACCENT      ui_color(UI_ROLE_ACCENT)
+#define C_HIGHLIGHT   ui_color(UI_ROLE_HIGHLIGHT)
+#define C_ACCENT_ALT  ui_color(UI_ROLE_ACCENT_ALT)
+#define C_ON_HL       ui_color(UI_ROLE_ON_HIGHLIGHT)
 
 /* Font Awesome 6 solid glyphs live in ui_icons.h (shared by every module). */
 
@@ -545,7 +546,7 @@ static void build_softkey_bar(lv_obj_t *parent)
     lv_obj_set_size(bar, PANEL_W, SOFTKEYS_H);
     lv_obj_set_pos(bar, 0, PANEL_H - SOFTKEYS_H);
     lv_obj_remove_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(bar, C_BG, 0);
+    lv_obj_set_style_bg_color(bar, C_GROUND, 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bar, 0, 0);
 
@@ -559,7 +560,7 @@ static void build_softkey_bar(lv_obj_t *parent)
         lv_obj_set_pos(box, UI_SK_CAP_INSET + i * UI_SK_CAP_PITCH,
                        UI_SK_CAP_TOP);
         lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_bg_color(box, C_BG, 0);
+        lv_obj_set_style_bg_color(box, C_GROUND, 0);
         lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(box, C_BORDER, 0);
         lv_obj_set_style_border_width(box, 2, 0);
@@ -1064,7 +1065,7 @@ int ui_shell_init(void)
     scr_root = root;
     lv_obj_set_size(root, PANEL_W, PANEL_H);
     lv_obj_remove_flag(root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(root, C_BG, 0);
+    lv_obj_set_style_bg_color(root, C_GROUND, 0);
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(root, 0, 0);
 
@@ -1074,7 +1075,7 @@ int ui_shell_init(void)
     lv_obj_set_size(content_area, PANEL_W, CONTENT_H);
     lv_obj_set_pos(content_area, 0, CONTENT_Y);
     lv_obj_remove_flag(content_area, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(content_area, C_BG, 0);
+    lv_obj_set_style_bg_color(content_area, C_GROUND, 0);
     lv_obj_set_style_bg_opa(content_area, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(content_area, 0, 0);
 

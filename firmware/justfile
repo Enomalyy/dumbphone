@@ -47,8 +47,13 @@ vendor:
         git clone --depth 1 --branch {{lvgl_tag}} https://github.com/lvgl/lvgl.git vendor/lvgl; \
     fi
 
+# Appearance gate (ui-architecture.md §14.10): no colour literals outside the
+# palette tables in ui/ui_theme.c and host/src/bezel.c. build-desktop runs it.
+check-colours:
+    ./tools/check-colours.sh
+
 # Configure + compile the native desktop simulator.
-build-desktop: vendor
+build-desktop: vendor check-colours
     cmake -S host -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEPS_PREFIX={{deps_prefix}}
     cmake --build build-host --parallel
 

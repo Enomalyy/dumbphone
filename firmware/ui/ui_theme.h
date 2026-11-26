@@ -3,7 +3,8 @@
  *
  * Two things live here, both appearance-only:
  *
- *   1. the PALETTE (colours), resolved through ui_palette();
+ *   1. the PALETTE: nine ROLES, resolved through ui_color() from the
+ *      theme tables in ui_theme.c;
  *   2. the DESIGN TOKENS: every shared visual measurement — panel and frame
  *      geometry, list/menu metrics, column positions, sidebar metrics and the
  *      pixel size of every font face — as named UI_* constants.
@@ -15,7 +16,7 @@
  *
  * A theme changes APPEARANCE only. It never touches layout semantics or key
  * bindings: navigation data (menu_t / keymap_t) never references the theme,
- * the renderer resolves appearance through ui_palette() + ui_font_*().
+ * the renderer resolves appearance through ui_color() + ui_font_*().
  *
  * The default theme is the flat pixel look from concept-art/07: charcoal-green
  * background, cyan as the active accent, green for selected fills, thin sage
@@ -139,38 +140,71 @@ extern "C" {
 #define UI_FONT_EMOJI_FILE   "NotoEmoji-Subset.ttf"
 
 /* ================================================================== */
-/* Palette                                                             */
+/* Palette — the nine ROLES (ui-architecture.md §14.10)                 */
 /* ================================================================== */
 
+/* Painters ask for a ROLE, never a colour: "this label is primary text",
+ * "this box is a frame", "this row is selected". The role -> colour
+ * mapping lives in ONE data table in ui_theme.c, which is the only place
+ * in the UI tree allowed to contain a colour literal. Adding a theme = one
+ * more column of nine values; nothing else changes.
+ *
+ * Contrast rule (checked when a palette is added, at palette level):
+ *   TEXT on GROUND / SURFACE, TEXT_DIM on GROUND / SURFACE,
+ *   ON_HIGHLIGHT on HIGHLIGHT   — all >= 4.5:1. */
+typedef enum {
+    UI_ROLE_GROUND = 0,   /* page background                          */
+    UI_ROLE_SURFACE,      /* rows, cells, panels (alternating band)    */
+    UI_ROLE_BORDER,       /* frames, rails, dividers                   */
+    UI_ROLE_TEXT,         /* primary text                              */
+    UI_ROLE_TEXT_DIM,     /* meta values, timestamps, previews         */
+    UI_ROLE_ACCENT,       /* icons, active tab, chevrons               */
+    UI_ROLE_HIGHLIGHT,    /* selection fill                            */
+    UI_ROLE_ACCENT_ALT,   /* secondary accent: the selection edge      */
+    UI_ROLE_ON_HIGHLIGHT, /* anything drawn ON a highlight fill        */
+    UI_ROLE_COUNT
+} ui_role_t;
+
 typedef struct {
-    lv_color_t bg;        /* charcoal-green background       */
-    lv_color_t bg_alt;    /* alternating row band            */
-    lv_color_t sel;       /* selected row / sent fill (green)*/
-    lv_color_t sel_edge;  /* bright green border             */
-    lv_color_t cyan;      /* active accent: carets, icons, tab */
-    lv_color_t text;      /* primary text                    */
-    lv_color_t text_dim;  /* secondary text / sage card border */
-    lv_color_t border;    /* soft-key / inactive-tab border  */
+    lv_color_t c[UI_ROLE_COUNT];
 } ui_palette_t;
 
-/* Set the palette. Call once on the UI thread before building any page.
- *
- * NOTE (themes on the fly): the palette is read when a page is BUILT, so
- * swapping it needs the built pages' styles re-applied (a rebuild pass).
- * Navigation never references colours, so a theme swap cannot break
- * routing — see ui-architecture.md §5. */
+/* The named themes. Order is the Settings cycle order. */
+typedef enum {
+    UI_THEME_DARK = 0,   /* charcoal-green ground, green highlight   */
+    UI_THEME_LIGHT,      /* white ground, bright-orange highlight    */
+    UI_THEME_COUNT
+} ui_theme_id_t;
+
+/* Resolve the palette of the current theme. Call once on the UI thread
+ * before building any page. */
 int ui_theme_init(void);
 
-const ui_palette_t *ui_palette(void);
+/* The ONE colour accessor. Painters call ui_color(UI_ROLE_TEXT) etc. */
+lv_color_t ui_color(ui_role_t role);
+
+/* Switch theme by id. Resolves the new palette and then runs the shell's
+ * registered apply pass (ui_theme_on_apply), which re-applies the styles of
+ * every built object — so a switch is visible immediately, no restart and no
+ * rebuild of the page tree. No-op when the theme is already active. */
+void ui_theme_set(ui_theme_id_t id);
+
+ui_theme_id_t ui_theme_get(void);
+const char *ui_theme_name(ui_theme_id_t id);
+const char *ui_role_name(ui_role_t role);
+
+/* Register the apply pass (the shell owns it: it knows every built page).
+ * Called by ui_theme_set() after the palette resolves. */
+void ui_theme_on_apply(void (*cb)(void));
 
 /* Font accessors — declared here (the appearance API) but defined in the
  * shell, which owns the LVGL font objects and their lifecycle. The renderer
  * (ui_menu.c) resolves every face through these so it stays theme-agnostic. */
 lv_font_t *ui_font_chrome(void);    /* Silkscreen 16 — status bar, soft keys */
 lv_font_t *ui_font_chrome_s(void);  /* Silkscreen 13 — category tabs         */
-lv_font_t *ui_font_title(void);     /* Silkscreen 24 — page titles           */
-lv_font_t *ui_font_body_l(void);    /* VT323 24 — primary list text           */
-lv_font_t *ui_font_body_m(void);    /* Pixelify Sans 8bpp 16 — preview/second.*/
+lv_font_t *ui_font_title(void);     /* HEADER role   — page titles           */
+lv_font_t *ui_font_body_l(void);    /* TEXT role     — primary list text     */
+lv_font_t *ui_font_body_m(void);    /* SUBTEXT role  — previews/second line  */
 lv_font_t *ui_font_icon(void);      /* Font Awesome solid 22                 */
 lv_font_t *ui_font_icon_s(void);    /* Font Awesome solid 13 (carets)        */
 

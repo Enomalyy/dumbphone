@@ -45,6 +45,17 @@
 #define RIGHT_PAD     UI_ROW_RIGHT_PAD
 #define COL_GAP       UI_ROW_COL_GAP
 
+/* Colours are ROLES (ui_theme.h); the theme table owns the values. */
+#define C_GROUND      ui_color(UI_ROLE_GROUND)
+#define C_SURFACE     ui_color(UI_ROLE_SURFACE)
+#define C_BORDER      ui_color(UI_ROLE_BORDER)
+#define C_TEXT        ui_color(UI_ROLE_TEXT)
+#define C_TEXT_DIM    ui_color(UI_ROLE_TEXT_DIM)
+#define C_ACCENT      ui_color(UI_ROLE_ACCENT)
+#define C_HIGHLIGHT   ui_color(UI_ROLE_HIGHLIGHT)
+#define C_ACCENT_ALT  ui_color(UI_ROLE_ACCENT_ALT)
+#define C_ON_HL       ui_color(UI_ROLE_ON_HIGHLIGHT)
+
 /* Grid layout (LAYOUT_GRID): the classic 3-wide app grid, one cell per
  * item in reading order. Both layouts render the same `items` data. */
 #define GRID_COLS    UI_GRID_COLS
@@ -77,6 +88,8 @@ struct ui_list_page {
     lv_obj_t *row_icon[MENU_MAX_ITEMS];
     lv_obj_t *row_lbl[MENU_MAX_ITEMS];
     lv_obj_t *row_sub[MENU_MAX_ITEMS];   /* optional second line       */
+    lv_obj_t *row_meta[MENU_MAX_ITEMS];  /* optional right-hand value  */
+    lv_obj_t *row_badge[MENU_MAX_ITEMS]; /* optional unread badge      */
 };
 
 static list_page_t g_pool[LIST_POOL];
@@ -189,12 +202,11 @@ static int label_width(const menu_item_t *it, int row_w)
 static void style_cell(list_page_t *p, int idx)
 {
     menu_t *m = p->m;
-    const ui_palette_t *pal = ui_palette();
     bool sel = (idx == m->cat_sel);
 
-    /* Active category: cyan border box + cyan icon (picture 7 accent). */
-    lv_obj_set_style_border_color(p->cells[idx], sel ? pal->cyan : pal->border, 0);
-    lv_obj_set_style_text_color(p->cell_icon[idx], sel ? pal->cyan : pal->text_dim, 0);
+    /* Active category: accent border box + accent icon (picture 7). */
+    lv_obj_set_style_border_color(p->cells[idx], sel ? C_ACCENT : C_BORDER, 0);
+    lv_obj_set_style_text_color(p->cell_icon[idx], sel ? C_ACCENT : C_TEXT_DIM, 0);
 }
 
 /* The ONE shared "paint a row" helper (declared in ui_menu.h): the base
@@ -204,13 +216,13 @@ static void style_cell(list_page_t *p, int idx)
  * caller's business (the sidebar re-styles its own labels on selection). */
 void ui_row_style(lv_obj_t *row, int idx, bool sel)
 {
-    const ui_palette_t *pal = ui_palette();
-
-    /* Unselected rows read as flat cards: band fill + thin sage border. */
-    lv_color_t band = (idx % 2) ? pal->bg_alt : pal->bg;
-    lv_obj_set_style_bg_color(row, sel ? pal->sel : band, 0);
+    /* Unselected rows read as flat cards: a GROUND/SURFACE band fill
+     * (alternating) with a thin BORDER frame. Selected: HIGHLIGHT fill with
+     * a 2 px ACCENT_ALT frame. */
+    lv_color_t band = (idx % 2) ? C_SURFACE : C_GROUND;
+    lv_obj_set_style_bg_color(row, sel ? C_HIGHLIGHT : band, 0);
     lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(row, sel ? pal->sel_edge : pal->text_dim, 0);
+    lv_obj_set_style_border_color(row, sel ? C_ACCENT_ALT : C_BORDER, 0);
     lv_obj_set_style_border_width(row, sel ? 2 : 1, 0);
     lv_obj_set_style_radius(row, 0, 0);
 }
@@ -226,10 +238,27 @@ static void style_row(list_page_t *p, int idx)
 
     ui_row_style(row, idx, sel);
 
+    /* Ink follows the fill: everything drawn ON a selected row is
+     * ON_HIGHLIGHT — primary text, the dim second line/meta and the accent
+     * badge alike. That is what makes a selection legible in BOTH palettes
+     * (black on the light theme's orange, off-white on the dark theme's
+     * green); TEXT_DIM on a highlight was 2.5:1 in the dark palette. */
+    lv_color_t ink     = sel ? C_ON_HL : C_TEXT;
+    lv_color_t ink_dim = sel ? C_ON_HL : C_TEXT_DIM;
+    lv_color_t ink_acc = sel ? C_ON_HL : C_ACCENT;
+
+    if (p->row_lbl[idx])   lv_obj_set_style_text_color(p->row_lbl[idx], ink, 0);
+    if (p->row_icon[idx])  lv_obj_set_style_text_color(p->row_icon[idx], ink, 0);
+    if (p->row_num[idx])   lv_obj_set_style_text_color(p->row_num[idx], ink_dim, 0);
+    if (p->row_sub[idx])   lv_obj_set_style_text_color(p->row_sub[idx], ink_dim, 0);
+    if (p->row_meta[idx])  lv_obj_set_style_text_color(p->row_meta[idx], ink_dim, 0);
+    if (p->row_badge[idx]) lv_obj_set_style_text_color(p->row_badge[idx], ink_acc, 0);
+
     lv_obj_t *caret = p->row_caret[idx];
     if (!caret) {
         return;
     }
+    lv_obj_set_style_text_color(caret, ink_acc, 0);
     if (sel) {
         lv_obj_remove_flag(caret, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -278,7 +307,6 @@ static void ensure_visible(list_page_t *p)
 static void rebuild_rows(list_page_t *p)
 {
     menu_t *m = p->m;
-    const ui_palette_t *pal = ui_palette();
 
     for (int i = 0; i < MENU_MAX_ITEMS; i++) {
         if (p->rows[i]) {
@@ -286,6 +314,7 @@ static void rebuild_rows(list_page_t *p)
         }
         p->rows[i] = p->row_caret[i] = p->row_num[i] = NULL;
         p->row_icon[i] = p->row_lbl[i] = p->row_sub[i] = NULL;
+        p->row_meta[i] = p->row_badge[i] = NULL;
     }
 
     /* The row arrays are MENU_MAX_ITEMS wide; a list longer than that
@@ -323,14 +352,14 @@ static void rebuild_rows(list_page_t *p)
         if (m->layout == LAYOUT_GRID) {
             /* Cell: icon centered top, label centered below (wraps to two
              * lines). No number/caret — the highlight box IS the selection. */
-            lv_obj_t *ic = mk_label(row, it->icon, ui_font_icon(), pal->text,
+            lv_obj_t *ic = mk_label(row, it->icon, ui_font_icon(), C_TEXT,
                                     0, 6, w);
             lv_obj_set_style_text_align(ic, LV_TEXT_ALIGN_CENTER, 0);
             p->row_icon[i] = ic;
 
             lv_obj_t *lb = lv_label_create(row);
             lv_obj_set_style_text_font(lb, ui_font_body_m(), 0);
-            lv_obj_set_style_text_color(lb, pal->text, 0);
+            lv_obj_set_style_text_color(lb, C_TEXT, 0);
             lv_obj_remove_flag(lb, LV_OBJ_FLAG_CLICKABLE);
             lv_label_set_long_mode(lb, LV_LABEL_LONG_MODE_WRAP);
             lv_obj_set_pos(lb, 4, 36);
@@ -341,25 +370,25 @@ static void rebuild_rows(list_page_t *p)
         } else {
             char num[8];
             snprintf(num, sizeof num, "%d.", i + 1);
-            p->row_caret[i] = mk_label(row, GLYPH_CARET_R, ui_font_icon_s(), pal->cyan,
+            p->row_caret[i] = mk_label(row, GLYPH_CARET_R, ui_font_icon_s(), C_ACCENT,
                                        1, 18, 12);
-            p->row_num[i]   = mk_label(row, num, ui_font_body_l(), pal->text_dim,
+            p->row_num[i]   = mk_label(row, num, ui_font_body_l(), C_TEXT_DIM,
                                        8, 1, 22);
-            p->row_icon[i]  = mk_label(row, it->icon, ui_font_icon(), pal->text,
+            p->row_icon[i]  = mk_label(row, it->icon, ui_font_icon(), C_TEXT,
                                        32, 6, 26);
             /* The name column ends just before whatever the row actually
              * draws to its right — measured per row (label_width), so a
              * row with a short value does not truncate the label. Long
              * names still truncate with dots, never overlap. */
             p->row_lbl[i]   = mk_data_line_label(row, it->label, ui_font_body_l(),
-                                                 pal->text, LABEL_X, 1,
+                                                 C_TEXT, LABEL_X, 1,
                                                  label_width(it, w), 26);
 
             /* Optional row extras: second line, right-aligned meta (time),
              * unread badge. Coords match the chat-row layout (gen-08). */
             if (it->sub && it->sub[0]) {
                 p->row_sub[i] = mk_data_line_label(row, it->sub, ui_font_body_m(),
-                                                   pal->text_dim, SUB_X, 26, SUB_W, 22);
+                                                   C_TEXT_DIM, SUB_X, 26, SUB_W, 22);
             }
             if (it->meta && it->meta[0]) {
                 /* Right-aligned value/time column, one line only. The column
@@ -370,15 +399,17 @@ static void rebuild_rows(list_page_t *p)
                  * is what makes LVGL's DOTS mode one line; without it an
                  * over-long value wrapped to a second line instead. */
                 lv_obj_t *t = mk_data_line_label(row, it->meta, ui_font_chrome_s(),
-                                                 pal->text_dim, META_X, 4, META_W, 20);
+                                                 C_TEXT_DIM, META_X, 4, META_W, 20);
                 lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_RIGHT, 0);
+                p->row_meta[i] = t;
             }
             if (it->badge > 0) {
                 char b[8];
                 snprintf(b, sizeof b, "[%d]", it->badge);
-                lv_obj_t *bd = mk_label(row, b, ui_font_chrome_s(), pal->cyan,
+                lv_obj_t *bd = mk_label(row, b, ui_font_chrome_s(), C_ACCENT,
                                         BADGE_X, 4, BADGE_W);
                 lv_obj_set_style_text_align(bd, LV_TEXT_ALIGN_RIGHT, 0);
+                p->row_badge[i] = bd;
             }
         }
     }
@@ -425,13 +456,11 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
     memset(p, 0, sizeof *p);
     p->m = m;
 
-    const ui_palette_t *pal = ui_palette();
-
     p->root = lv_obj_create(parent);
     lv_obj_set_size(p->root, PANEL_W, CONTENT_H);
     lv_obj_set_pos(p->root, 0, 0);
     lv_obj_remove_flag(p->root, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(p->root, pal->bg, 0);
+    lv_obj_set_style_bg_color(p->root, C_GROUND, 0);
     lv_obj_set_style_bg_opa(p->root, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(p->root, 0, 0);
 
@@ -447,21 +476,21 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
             lv_obj_set_size(box, UI_TRAY_CELL_W, UI_TRAY_CELL_H);
             lv_obj_set_pos(box, cx - UI_TRAY_CELL_W / 2, TRAY_Y);
             lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_set_style_bg_color(box, pal->bg, 0);
+            lv_obj_set_style_bg_color(box, C_GROUND, 0);
             lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(box, 2, 0);
             lv_obj_set_style_radius(box, 0, 0);
             p->cell_icon[i] = mk_label(box, m->cats[i].icon, ui_font_icon(),
-                                       pal->cyan, 4, 1, 20);
+                                       C_ACCENT, 4, 1, 20);
         }
 
         /* --- centered category title flanked by << >> chevrons --- */
-        p->chev_l = mk_label(p->root, GLYPH_CHEV_L, ui_font_icon_s(), pal->cyan,
+        p->chev_l = mk_label(p->root, GLYPH_CHEV_L, ui_font_icon_s(), C_ACCENT,
                              4, TITLE_Y + 4, 16);
-        p->chev_r = mk_label(p->root, GLYPH_CHEV_R, ui_font_icon_s(), pal->cyan,
+        p->chev_r = mk_label(p->root, GLYPH_CHEV_R, ui_font_icon_s(), C_ACCENT,
                              PANEL_W - 20, TITLE_Y + 4, 16);
         p->title_lbl = mk_center_label(p->root, m->cats[m->cat_sel].label,
-                                       ui_font_title(), pal->text, TITLE_Y);
+                                       ui_font_title(), C_TEXT, TITLE_Y);
 
         for (int i = 0; i < n; i++) {
             style_cell(p, i);

@@ -22,6 +22,13 @@
 #include "ui_sidebar.h"
 
 #define SIDEBAR_W      UI_SIDEBAR_W
+
+/* Colours are ROLES (ui_theme.h); the theme table owns the values. */
+#define C_GROUND      ui_color(UI_ROLE_GROUND)
+#define C_BORDER      ui_color(UI_ROLE_BORDER)
+#define C_TEXT        ui_color(UI_ROLE_TEXT)
+#define C_ACCENT      ui_color(UI_ROLE_ACCENT)
+#define C_ON_HL       ui_color(UI_ROLE_ON_HIGHLIGHT)
 #define SIDEBAR_ROWS_Y UI_SIDEBAR_ROWS_Y
 #define SIDEBAR_ROW_H  UI_SIDEBAR_ROW_H
 #define OPT_MAX        UI_SIDEBAR_ROWS_MAX   /* more than any page's table */
@@ -70,13 +77,14 @@ static void style_side_row(int idx)
     if (!row) {
         return;
     }
-    const ui_palette_t *pal = ui_palette();
     bool sel = (idx == g_side_sel);
 
     ui_row_style(row, idx, sel);
 
-    lv_obj_set_style_text_color(side_row_icon[idx], sel ? pal->bg : pal->cyan, 0);
-    lv_obj_set_style_text_color(side_row_lbl[idx], sel ? pal->bg : pal->text, 0);
+    /* Ink on a selected row is ON_HIGHLIGHT (it used to be the page
+     * GROUND — 2.7:1 on the dark highlight, the palette's one bad pair). */
+    lv_obj_set_style_text_color(side_row_icon[idx], sel ? C_ON_HL : C_ACCENT, 0);
+    lv_obj_set_style_text_color(side_row_lbl[idx], sel ? C_ON_HL : C_TEXT, 0);
 }
 
 /* Execute an option on RELEASE, not PRESS: a drag starting on a row must
@@ -99,22 +107,20 @@ static void on_side_row_tap(lv_event_t *e)
 
 void ui_sidebar_build(lv_obj_t *parent)
 {
-    const ui_palette_t *pal = ui_palette();
-
     /* Last child of root: drawn above the content screens. It covers only
      * the content area — the pinned status/softkey bars stay clear. */
     scr_sidebar = lv_obj_create(parent);
     lv_obj_set_size(scr_sidebar, SIDEBAR_W, UI_CONTENT_H);
     lv_obj_set_pos(scr_sidebar, 0, UI_CONTENT_Y);
     lv_obj_remove_flag(scr_sidebar, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(scr_sidebar, pal->bg, 0);
+    lv_obj_set_style_bg_color(scr_sidebar, C_GROUND, 0);
     lv_obj_set_style_bg_opa(scr_sidebar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(scr_sidebar, pal->border, 0);
+    lv_obj_set_style_border_color(scr_sidebar, C_BORDER, 0);
     lv_obj_set_style_border_width(scr_sidebar, 2, 0);
     lv_obj_set_style_radius(scr_sidebar, 0, 0);
     lv_obj_add_flag(scr_sidebar, LV_OBJ_FLAG_HIDDEN);
 
-    side_label(scr_sidebar, "OPTIONS", ui_font_chrome(), pal->text, 10, 8, 90);
+    side_label(scr_sidebar, "OPTIONS", ui_font_chrome(), C_TEXT, 10, 8, 90);
 
     for (int i = 0; i < OPT_MAX; i++) {
         lv_obj_t *row = lv_obj_create(scr_sidebar);
@@ -127,9 +133,9 @@ void ui_sidebar_build(lv_obj_t *parent)
          * row must not execute it — same rule as the list renderer's rows. */
         lv_obj_add_event_cb(row, on_side_row_tap, LV_EVENT_RELEASED, NULL);
 
-        side_row_icon[i] = side_label(row, "", ui_font_icon(), pal->text,
+        side_row_icon[i] = side_label(row, "", ui_font_icon(), C_ACCENT,
                                       12, 6, 26);
-        side_row_lbl[i]  = side_label(row, "", ui_font_body_l(), pal->text,
+        side_row_lbl[i]  = side_label(row, "", ui_font_body_l(), C_TEXT,
                                       46, 1, SIDEBAR_W - 46 - 8);
         lv_label_set_long_mode(side_row_lbl[i], LV_LABEL_LONG_MODE_DOTS);
 

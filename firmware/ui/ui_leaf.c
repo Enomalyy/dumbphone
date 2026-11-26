@@ -19,6 +19,12 @@
 #include "ui_theme.h"
 #include "ui_leaf.h"
 
+/* Colours are ROLES (ui_theme.h); the theme table owns the values. */
+#define C_GROUND      ui_color(UI_ROLE_GROUND)
+#define C_TEXT        ui_color(UI_ROLE_TEXT)
+#define C_TEXT_DIM    ui_color(UI_ROLE_TEXT_DIM)
+#define C_ACCENT      ui_color(UI_ROLE_ACCENT)
+
 /* Seed values: the same constants the status bar starts from. The shell's
  * 1-second tick refreshes both on a running phone; a frozen (harness) run
  * keeps these for good. */
@@ -76,12 +82,10 @@ static lv_obj_t *leaf_label(lv_obj_t *parent, const char *text,
  * scroll, no border, no padding. */
 static void style_content_screen(lv_obj_t *scr)
 {
-    const ui_palette_t *pal = ui_palette();
-
     lv_obj_set_pos(scr, 0, 0);
     lv_obj_set_size(scr, UI_PANEL_W, UI_CONTENT_H);
     lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(scr, pal->bg, 0);
+    lv_obj_set_style_bg_color(scr, C_GROUND, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(scr, 0, 0);
     lv_obj_set_style_pad_all(scr, 0, 0);
@@ -95,29 +99,27 @@ static void style_content_screen(lv_obj_t *scr)
 
 void ui_leaf_build_lock(lv_obj_t *parent)
 {
-    const ui_palette_t *pal = ui_palette();
-
     scr_lock = lv_obj_create(parent);
     style_content_screen(scr_lock);
     lv_obj_add_flag(scr_lock, LV_OBJ_FLAG_HIDDEN);
 
-    lv_obj_t *icon = leaf_label(scr_lock, I_LOCK, ui_font_icon(), pal->cyan,
+    lv_obj_t *icon = leaf_label(scr_lock, I_LOCK, ui_font_icon(), C_ACCENT,
                                 0, 0, UI_PANEL_W);
     lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(icon, LV_ALIGN_CENTER, 0, -104);
 
-    lock_clock_lbl = leaf_label(scr_lock, "", ui_font_title(), pal->text,
+    lock_clock_lbl = leaf_label(scr_lock, "", ui_font_title(), C_TEXT,
                                 0, 0, UI_PANEL_W);
     lv_obj_set_style_text_align(lock_clock_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(lock_clock_lbl, LV_ALIGN_CENTER, 0, -52);
 
-    lock_date_lbl = leaf_label(scr_lock, "", ui_font_body_l(), pal->cyan,
+    lock_date_lbl = leaf_label(scr_lock, "", ui_font_body_l(), C_ACCENT,
                                0, 0, UI_PANEL_W);
     lv_obj_set_style_text_align(lock_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(lock_date_lbl, LV_ALIGN_CENTER, 0, -4);
 
     lv_obj_t *hint = leaf_label(scr_lock, "KEYPAD TO UNLOCK",
-                                ui_font_chrome_s(), pal->text_dim,
+                                ui_font_chrome_s(), C_TEXT_DIM,
                                 0, 0, UI_PANEL_W);
     lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(hint, LV_ALIGN_CENTER, 0, 52);
@@ -153,8 +155,6 @@ const keymap_t *ui_leaf_lock_keymap(void)
 
 void ui_leaf_build_stub(lv_obj_t *parent)
 {
-    const ui_palette_t *pal = ui_palette();
-
     scr_stub = lv_obj_create(parent);
     style_content_screen(scr_stub);
     lv_obj_add_flag(scr_stub, LV_OBJ_FLAG_HIDDEN);
@@ -162,14 +162,14 @@ void ui_leaf_build_stub(lv_obj_t *parent)
     stub_title_lbl = lv_label_create(scr_stub);
     lv_label_set_text(stub_title_lbl, "");
     lv_obj_set_style_text_font(stub_title_lbl, ui_font_title(), 0);
-    lv_obj_set_style_text_color(stub_title_lbl, pal->text, 0);
+    lv_obj_set_style_text_color(stub_title_lbl, C_TEXT, 0);
     lv_obj_remove_flag(stub_title_lbl, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(stub_title_lbl, LV_ALIGN_CENTER, 0, -40);
 
     lv_obj_t *sub = lv_label_create(scr_stub);
     lv_label_set_text(sub, "coming soon");
     lv_obj_set_style_text_font(sub, ui_font_body_m(), 0);
-    lv_obj_set_style_text_color(sub, pal->text_dim, 0);
+    lv_obj_set_style_text_color(sub, C_TEXT_DIM, 0);
     lv_obj_remove_flag(sub, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, 8);
 }
