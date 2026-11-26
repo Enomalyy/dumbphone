@@ -44,6 +44,13 @@ build-desktop: vendor
     cmake -S host -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEPS_PREFIX={{deps_prefix}}
     cmake --build build-host -j$(nproc)
 
+# Desktop build with flush instrumentation (UI_FLUSH_STATS=1): the binary
+# prints a bytes/flush-count/largest-area summary at exit. Separate build
+# dir so the default build stays clean; off by default.
+build-desktop-stats: vendor
+    cmake -S host -B build-host-stats -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEPS_PREFIX={{deps_prefix}} -DFLUSH_STATS=ON
+    cmake --build build-host-stats -j$(nproc)
+
 # Open the simulator window (bezelled mock-up; scale auto-fits the display).
 # Also serves the browser viewport on the tailnet (--no-server to disable).
 run-desktop: build-desktop

@@ -34,8 +34,11 @@
 #include "ui_keymap.h"
 #include "ui_menu.h"
 #include "ui_home.h"
+#include "ui_input.h"
 #include "ui_mainmenu.h"
+#include "ui_leaf.h"
 #include "ui_options.h"
+#include "ui_sidebar.h"
 #include "ui_settings.h"
 #include "ui_speeddial.h"
 #include "ui_shell.h"
@@ -95,9 +98,6 @@ static bool clock_frozen = false;   /* harness: never tick (see set_clock_freeze
 static lv_obj_t *scr_root;      /* the persistent root screen (the frame)  */
 static lv_obj_t *content_area;  /* swaps screens; the frame around it is fixed */
 static lv_obj_t *scr_menu;
-static lv_obj_t *scr_lock;         /* lock screen (spec §1)                 */
-static lv_obj_t *lock_clock_lbl;   /* the lock screen's large live clock    */
-static lv_obj_t *lock_date_lbl;     /* the lock screen's date line           */
 static lv_obj_t *lbl_clock;
 
 /* Screen stack (depth 4 is plenty for a skeleton). */
@@ -122,59 +122,65 @@ static page_id_t req_stub_id = PAGE_NONE;
 static bool ui_thread_set = false;
 
 /* ------------------------------------------------------------------ */
-/* Display glue: LVGL flush -> HAL full-frame blit                    */
+/* Display glue: LVGL flush -> HAL region blit                        */
 /* ------------------------------------------------------------------ */
+
+/* Optional flush instrumentation (build with -DUI_FLUSH_STATS=1): counts
+ * the bytes pushed through hal_display_blit*, the flush count, and the
+ * largest single area; a summary prints at exit. Off by default — none of
+ * this compiles into a normal build. */
+#ifdef UI_FLUSH_STATS
+static uint64_t g_flush_bytes;
+static uint32_t g_flush_count;
+static uint16_t g_flush_max_w, g_flush_max_h;
+
+static void flush_stats_summary(void)
+{
+    printf("[flush] %u flushes, %llu bytes pushed via hal_display_blit*, "
+           "largest area %ux%u px\n",
+           g_flush_count, (unsigned long long)g_flush_bytes,
+           g_flush_max_w, g_flush_max_h);
+}
+#endif
 
 static void display_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
 {
-    /* The render buffer lives behind hal_display; copy the dirty rows in,
-     * then push the whole frame (320x480x2 = 307 KB — trivial on desktop). */
+    /* Keep the shadow framebuffer current (frame dumps and the browser
+     * viewport read it), then present ONLY the dirty area. LVGL's draw
+     * buffer rows are packed exactly as hal_display_blit_area expects:
+     * w*2 bytes per row, no stride — so the region goes straight from the
+     * render buffer to the panel, no full-frame readback. */
     const uint8_t *frame = hal_display_framebuffer();
     if (!frame) {
         lv_display_flush_ready(disp);
         return;
     }
+    int x = (int)area->x1;
+    int y = (int)area->y1;
     int w = (int)(area->x2 - area->x1 + 1);
-    for (int y = (int)area->y1; y <= (int)area->y2; y++) {
-        const uint8_t *src = px + (size_t)(y - area->y1) * w * 2;
-        uint8_t *dst = (uint8_t *)frame + ((size_t)y * PANEL_W + area->x1) * 2;
-        memcpy(dst, src, (size_t)w * 2);
+    int h = (int)(area->y2 - area->y1 + 1);
+    for (int ry = 0; ry < h; ry++) {
+        memcpy((uint8_t *)frame + ((size_t)(y + ry) * PANEL_W + x) * 2,
+               px + (size_t)ry * w * 2, (size_t)w * 2);
     }
-    hal_display_blit(frame, (size_t)PANEL_W * PANEL_H * 2);
+    hal_display_blit_area(px, (uint16_t)x, (uint16_t)y, (uint16_t)w, (uint16_t)h);
+#ifdef UI_FLUSH_STATS
+    {
+        uint32_t area_px = (uint32_t)w * (uint32_t)h;
+        g_flush_bytes += (uint64_t)w * h * 2;
+        g_flush_count++;
+        if (area_px > (uint32_t)g_flush_max_w * g_flush_max_h) {
+            g_flush_max_w = (uint16_t)w;
+            g_flush_max_h = (uint16_t)h;
+        }
+    }
+#endif
     lv_display_flush_ready(disp);
-}
-
-/* ------------------------------------------------------------------ */
-/* Input glue: HAL touch state -> LVGL indev                          */
-/* ------------------------------------------------------------------ */
-
-static struct {
-    int16_t x, y;
-    bool pressed;
-} touch_state = { 0, 0, false };
-
-static void indev_read_cb(lv_indev_t *indev, lv_indev_data_t *d)
-{
-    (void)indev;
-    d->point.x = touch_state.x;
-    d->point.y = touch_state.y;
-    d->state = touch_state.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
 /* ------------------------------------------------------------------ */
 /* Style helpers                                                       */
 /* ------------------------------------------------------------------ */
-
-static void style_content_screen(lv_obj_t *scr)
-{
-    lv_obj_set_pos(scr, 0, 0);
-    lv_obj_set_size(scr, PANEL_W, CONTENT_H);
-    lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(scr, C_BG, 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(scr, 0, 0);
-    lv_obj_set_style_pad_all(scr, 0, 0);
-}
 
 static lv_obj_t *make_label(lv_obj_t *parent, const char *text, lv_font_t *font,
                             lv_color_t color, int x, int y, int w)
@@ -218,12 +224,10 @@ static void clock_tick_cb(lv_timer_t *timer)
     char buf[8];
     strftime(buf, sizeof buf, "%H:%M", &tm_now);
     lv_label_set_text(lbl_clock, buf);
-    if (lock_clock_lbl) {   /* the lock screen shares the live clock */
-        lv_label_set_text(lock_clock_lbl, buf);
-        char dbuf[16];
-        strftime(dbuf, sizeof dbuf, "%a %d %b", &tm_now);
-        lv_label_set_text(lock_date_lbl, dbuf);
-    }
+    /* The lock screen shares the live clock (ui_leaf.c owns the labels). */
+    char dbuf[16];
+    strftime(dbuf, sizeof dbuf, "%a %d %b", &tm_now);
+    ui_leaf_set_lock_time(buf, dbuf);
 }
 
 /* ------------------------------------------------------------------ */
@@ -239,50 +243,6 @@ static void clock_tick_cb(lv_timer_t *timer)
 /* END = home from anywhere. Unbound slots are ACT_NOOP.                */
 /* ------------------------------------------------------------------ */
 
-/* Stub leaf page: options with shoulder-L, back with shoulder-R, home
- * with END; nothing else. */
-static const keymap_t km_stub = {
-    .shoulder_l = ACT_OPEN_OPTIONS,
-    .shoulder_r = ACT_GO_BACK,
-    .end        = ACT_GOTO_HOME,
-};
-
-/* LOCKED (spec §1): the keypad unlocks — any T9 key; every other control
- * (d-pad, shoulders, CALL, END, CENTER) is inert while locked. */
-static const keymap_t km_lock = {
-    .shoulder_l = ACT_NOOP,
-    .shoulder_r = ACT_NOOP,
-    .center     = ACT_NOOP,
-    .call       = ACT_NOOP,
-    .end        = ACT_NOOP,
-    .up         = ACT_NOOP,
-    .down       = ACT_NOOP,
-    .left       = ACT_NOOP,
-    .right      = ACT_NOOP,
-    .t9         = { ACT_UNLOCK, ACT_UNLOCK, ACT_UNLOCK, ACT_UNLOCK,
-                    ACT_UNLOCK, ACT_UNLOCK, ACT_UNLOCK, ACT_UNLOCK,
-                    ACT_UNLOCK, ACT_UNLOCK, ACT_UNLOCK, ACT_UNLOCK },
-};
-
-/* Options sidebar overlay: its own contextual keymap while open (spec §1).
- * SHOULDER-L re-press and SHOULDER-R back both close it WITHOUT popping the
- * page behind; END closes and goes home; CENTER executes the selected
- * option; UP/DOWN move the selection. */
-static const keymap_t km_sidebar = {
-    .shoulder_l = ACT_OPEN_OPTIONS,
-    .shoulder_r = ACT_GO_BACK,
-    .center     = ACT_ACTIVATE,
-    .end        = ACT_GOTO_HOME,
-    .up         = ACT_MOVE_SEL_UP,
-    .down       = ACT_MOVE_SEL_DOWN,
-};
-
-/* The options sidebar overlay (spec §1), defined further down; navigation
- * always closes it. */
-static void sidebar_close(void);
-static void sidebar_open_for(ui_screen_id_t screen);
-static void sidebar_execute(int idx);
-
 static const keymap_t *page_keymap(void)
 {
     switch (screen_stack[stack_top]) {
@@ -292,8 +252,8 @@ static const keymap_t *page_keymap(void)
     case UI_SCREEN_HELDPRESS:  return &ui_heldpress_page()->keys;
     case UI_SCREEN_CALLHIST:   return &ui_calls_history_page()->keys;
     case UI_SCREEN_CONTACTS:   return &ui_calls_contacts_page()->keys;
-    case UI_SCREEN_STUB:       return &km_stub;
-    case UI_SCREEN_LOCK:       return &km_lock;
+    case UI_SCREEN_STUB:       return ui_leaf_stub_keymap();
+    case UI_SCREEN_LOCK:       return ui_leaf_lock_keymap();
     default:                   return ui_home_keymap();   /* CHATLIST */
     }
 }
@@ -304,7 +264,7 @@ static void go_home(void)
     stack_top = 0;
     screen_stack[0] = UI_SCREEN_CHATLIST;
     ui_shell_show_screen(UI_SCREEN_CHATLIST);
-    sidebar_close();
+    ui_sidebar_close();
 }
 
 static void go_back(void)
@@ -313,7 +273,7 @@ static void go_back(void)
     if (stack_top > 0) {
         stack_top--;
         ui_shell_show_screen(screen_stack[stack_top]);
-        sidebar_close();
+        ui_sidebar_close();
     }
 }
 
@@ -327,7 +287,7 @@ static void push_screen(ui_screen_id_t id)
         screen_stack[stack_top] = id;
     }
     ui_shell_show_screen(id);
-    sidebar_close();
+    ui_sidebar_close();
 }
 
 /* Lock the phone (spec §1): replace the whole stack with the LOCKED page.
@@ -335,7 +295,7 @@ static void push_screen(ui_screen_id_t id)
 static void do_lock(void)
 {
     end_armed = false;
-    sidebar_close();
+    ui_sidebar_close();
     stack_top = 0;
     screen_stack[0] = UI_SCREEN_LOCK;
     ui_shell_show_screen(UI_SCREEN_LOCK);
@@ -430,7 +390,7 @@ static void do_action(action_t a, hal_key_t key)
     case ACT_ACTIVATE:       activate();           break;
     case ACT_OPEN_OPTIONS:
         /* SHOULDER-L: the context-sensitive sidebar for THIS page. */
-        sidebar_open_for(screen_stack[stack_top]);
+        ui_sidebar_open_for(screen_stack[stack_top]);
         break;
     case ACT_DIAL:
         /* T9 keys 1..9 are contiguous in hal_key_t; the slot index is the
@@ -559,99 +519,17 @@ static void build_contacts_screen(void)
     g_contacts = ui_list_build(content_area, ui_calls_contacts_page());
 }
 
-/* ------------------------------------------------------------------ */
-/* Stub leaf page — title + "coming soon". Real content arrives in a    */
-/* later leg; navigation already works end-to-end.                     */
-/* ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ */
-/* Lock screen (spec §1) — bespoke like the stub page: a flat        */
-/* readout, not a list. Lock glyph, large live clock, date line, and*/
-/* the unlock hint. Locked by END×2 on HOME; any T9 keypad key       */
-/* unlocks (PIN entry is explicitly later per spec).                */
-/* ------------------------------------------------------------------ */
-
-static void build_lock_screen(void)
-{
-    scr_lock = lv_obj_create(content_area);
-    style_content_screen(scr_lock);
-    lv_obj_add_flag(scr_lock, LV_OBJ_FLAG_HIDDEN);
-
-    lv_obj_t *icon = make_label(scr_lock, I_LOCK, f_icon, C_CYAN, 0, 0,
-                                PANEL_W);
-    lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(icon, LV_ALIGN_CENTER, 0, -104);
-
-    lock_clock_lbl = make_label(scr_lock, "", f_title, C_TEXT, 0, 0, PANEL_W);
-    lv_obj_set_style_text_align(lock_clock_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(lock_clock_lbl, LV_ALIGN_CENTER, 0, -52);
-
-    lock_date_lbl = make_label(scr_lock, "", f_body_l, C_CYAN, 0, 0, PANEL_W);
-    lv_obj_set_style_text_align(lock_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(lock_date_lbl, LV_ALIGN_CENTER, 0, -4);
-
-    lv_obj_t *hint = make_label(scr_lock, "KEYPAD TO UNLOCK", f_chrome_s,
-                                C_TEXT_DIM, 0, 0, PANEL_W);
-    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(hint, LV_ALIGN_CENTER, 0, 52);
-
-    /* Seed from the same constants as the status bar; the 1-second tick
-     * refreshes both on a running phone, and a frozen (harness) run keeps
-     * this value for good. */
-    lv_label_set_text(lock_clock_lbl, CLOCK_SEED_TIME);
-    lv_label_set_text(lock_date_lbl, CLOCK_SEED_DATE);
-}
-
-static lv_obj_t *scr_stub = NULL;
-static lv_obj_t *stub_title_lbl = NULL;
-
-static const char *stub_title(page_id_t id)
-{
-    switch (id) {
-    case PAGE_NEW_MESSAGE:  return "New Message";
-    case PAGE_CALL_HISTORY: return "Call History";
-    case PAGE_NEW_CALL:     return "New Call";
-    case PAGE_CONTACTS:     return "Contacts";
-    case PAGE_MAP_SEARCH:   return "Search";
-    case PAGE_TRANSIT_PAY:  return "Transit Payments";
-    case PAGE_ROUTES:       return "Routes";
-    case PAGE_LINES:        return "Lines";
-    case PAGE_STATIONS:     return "Stations";
-    case PAGE_SETTINGS:     return "Settings";
-    default:                return "Coming Soon";
-    }
-}
-
-static void build_stub_screen(void)
-{
-    scr_stub = lv_obj_create(content_area);
-    style_content_screen(scr_stub);
-    lv_obj_add_flag(scr_stub, LV_OBJ_FLAG_HIDDEN);
-
-    stub_title_lbl = lv_label_create(scr_stub);
-    lv_label_set_text(stub_title_lbl, "");
-    lv_obj_set_style_text_font(stub_title_lbl, f_title, 0);
-    lv_obj_set_style_text_color(stub_title_lbl, C_TEXT, 0);
-    lv_obj_remove_flag(stub_title_lbl, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(stub_title_lbl, LV_ALIGN_CENTER, 0, -40);
-
-    lv_obj_t *sub = lv_label_create(scr_stub);
-    lv_label_set_text(sub, "coming soon");
-    lv_obj_set_style_text_font(sub, f_body_m, 0);
-    lv_obj_set_style_text_color(sub, C_TEXT_DIM, 0);
-    lv_obj_remove_flag(sub, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(sub, LV_ALIGN_CENTER, 0, 8);
-}
-
+/* The stub page's content lives in ui_leaf.c; the push is navigation, so it
+ * stays here. */
 static void show_stub_title(const char *title)
 {
-    lv_label_set_text(stub_title_lbl, title);
+    ui_leaf_set_stub_title(title);
     push_screen(UI_SCREEN_STUB);
 }
 
 static void open_stub(page_id_t id)
 {
-    show_stub_title(stub_title(id));
+    show_stub_title(ui_leaf_stub_title_for(id));
 }
 
 /* A speed dial's call screen: the stub titled with the contact name. The
@@ -699,110 +577,12 @@ static void open_page(page_id_t id)
 /* no allocation in the open/execute path.                            */
 /* ------------------------------------------------------------------ */
 
-#define SIDEBAR_W      UI_SIDEBAR_W
-#define SIDEBAR_ROWS_Y UI_SIDEBAR_ROWS_Y
-#define SIDEBAR_ROW_H  UI_SIDEBAR_ROW_H
-#define OPT_MAX        UI_SIDEBAR_ROWS_MAX   /* more than any page's table holds */
-
-static lv_obj_t *scr_sidebar;
-static lv_obj_t *side_rows[OPT_MAX];
-static lv_obj_t *side_row_icon[OPT_MAX];
-static lv_obj_t *side_row_lbl[OPT_MAX];
-static const opt_entry_t *g_side_opts = NULL;
-static int g_side_n = 0;
-static int g_side_sel = 0;
-static bool sidebar_open = false;
-
-/* Same selection look as the list renderer: green fill + bright edge. */
-static void style_side_row(int idx)
-{
-    lv_obj_t *row = side_rows[idx];
-    if (!row) {
-        return;
-    }
-    const ui_palette_t *pal = ui_palette();
-    bool sel = (idx == g_side_sel);
-    lv_color_t band = (idx % 2) ? pal->bg_alt : pal->bg;
-    lv_obj_set_style_bg_color(row, sel ? pal->sel : band, 0);
-    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(row, sel ? pal->sel_edge : pal->text_dim, 0);
-    lv_obj_set_style_border_width(row, sel ? 2 : 1, 0);
-    /* Same text look as the list renderer: dark on the green selection. */
-    lv_obj_set_style_text_color(side_row_icon[idx], sel ? pal->bg : pal->cyan, 0);
-    lv_obj_set_style_text_color(side_row_lbl[idx], sel ? pal->bg : pal->text, 0);
-}
-
-/* Execute an option on RELEASE, not PRESS: a drag starting on a row must
- * not execute it (same rule as the list renderer's rows — see on_row_tap). */
-static void on_side_row_tap(lv_event_t *e)
-{
-    if (lv_indev_get_press_moved(lv_event_get_indev(e))) {
-        return;   /* it was a drag, not a tap */
-    }
-    lv_obj_t *t = lv_event_get_target(e);
-    for (int i = 0; i < OPT_MAX; i++) {
-        if (side_rows[i] == t) {
-            sidebar_execute(i);
-            return;
-        }
-    }
-}
-
-static void build_sidebar(void)
-{
-    const ui_palette_t *pal = ui_palette();
-
-    /* Last child of root: drawn above the content screens. It covers only
-     * the content area — the pinned status/softkey bars stay clear. */
-    scr_sidebar = lv_obj_create(scr_root);
-    lv_obj_set_size(scr_sidebar, SIDEBAR_W, CONTENT_H);
-    lv_obj_set_pos(scr_sidebar, 0, CONTENT_Y);
-    lv_obj_remove_flag(scr_sidebar, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(scr_sidebar, pal->bg, 0);
-    lv_obj_set_style_bg_opa(scr_sidebar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(scr_sidebar, pal->border, 0);
-    lv_obj_set_style_border_width(scr_sidebar, 2, 0);
-    lv_obj_set_style_radius(scr_sidebar, 0, 0);
-    lv_obj_add_flag(scr_sidebar, LV_OBJ_FLAG_HIDDEN);
-
-    make_label(scr_sidebar, "OPTIONS", f_chrome, C_TEXT, 10, 8, 90);
-
-    for (int i = 0; i < OPT_MAX; i++) {
-        lv_obj_t *row = lv_obj_create(scr_sidebar);
-        side_rows[i] = row;
-        lv_obj_set_size(row, SIDEBAR_W - 12, SIDEBAR_ROW_H - 3);
-        lv_obj_set_pos(row, 6, SIDEBAR_ROWS_Y + i * SIDEBAR_ROW_H);
-        lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_radius(row, 0, 0);
-        /* Execute on RELEASE (see on_side_row_tap): a drag that starts on a
-         * row must not execute it — same rule as the list renderer's rows. */
-        lv_obj_add_event_cb(row, on_side_row_tap, LV_EVENT_RELEASED, NULL);
-
-        side_row_icon[i] = make_label(row, "", f_icon, C_TEXT, 12, 6, 26);
-        side_row_lbl[i]  = make_label(row, "", f_body_l, C_TEXT,
-                                      46, 1, SIDEBAR_W - 46 - 8);
-        lv_label_set_long_mode(side_row_lbl[i], LV_LABEL_LONG_MODE_DOTS);
-
-        lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-/* Horizontal-swipe handling (spec §1): a drag that moves more than
- * SWIPE_MIN_PX sideways, dominant over vertical, fires the visible list
- * page's gesture callback once — swipe left = next, swipe right = previous.
- * Vertical drags scroll natively via LVGL and never fire it. Swipes are
- * inert while the options sidebar is open (it covers the row area). */
-#define SWIPE_MIN_PX 50
-
-static struct {
-    bool   active;   /* a touch drag is in progress        */
-    int16_t x0, y0;  /* down position, panel px           */
-    bool   fired;    /* this drag already fired the swipe */
-} swipe_state = { false, 0, 0, false };
-
+/* Swipe intent: hand it to the visible page's own gesture callback (each
+ * list page decides what a sideways swipe means — the chat list and the main
+ * menu both cycle their category strip). */
 static void page_swipe(int dir)
 {
-    if (sidebar_open) {
+    if (ui_sidebar_is_open()) {
         return;
     }
     list_page_t *p = NULL;
@@ -820,73 +600,18 @@ static void page_swipe(int dir)
     }
 }
 
-static void sidebar_close(void)
-{
-    sidebar_open = false;
-    if (scr_sidebar) {
-        lv_obj_add_flag(scr_sidebar, LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-/* Populate the rows from `screen`'s options table and show the panel. */
-static void sidebar_open_for(ui_screen_id_t screen)
-{
-    int n;
-    g_side_opts = ui_options_for(screen, &n);
-    if (n > OPT_MAX) {
-        n = OPT_MAX;
-    }
-    g_side_n = n;
-    g_side_sel = 0;
-
-    for (int i = 0; i < OPT_MAX; i++) {
-        lv_obj_t *row = side_rows[i];
-        if (i < n) {
-            const opt_entry_t *o = &g_side_opts[i];
-            lv_label_set_text(side_row_icon[i], o->icon);
-            lv_label_set_text(side_row_lbl[i], o->label);
-            lv_obj_remove_flag(row, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-    for (int i = 0; i < n; i++) {
-        style_side_row(i);
-    }
-
-    sidebar_open = true;
-    lv_obj_remove_flag(scr_sidebar, LV_OBJ_FLAG_HIDDEN);
-}
-
-static void sidebar_move(int step)
-{
-    if (g_side_n == 0) {
-        return;
-    }
-    int s = g_side_sel + step;
-    if (s < 0) {
-        s = 0;
-    }
-    if (s >= g_side_n) {
-        s = g_side_n - 1;
-    }
-    if (s == g_side_sel) {
-        return;
-    }
-    style_side_row(g_side_sel);
-    g_side_sel = s;
-    style_side_row(g_side_sel);
-}
-
 /* Execute option `idx`, then close. Navigation options push a screen, and
  * push_screen() closes the sidebar itself; in-place actions (the view
  * toggle) close it here. */
 static void sidebar_execute(int idx)
 {
-    if (idx < 0 || idx >= g_side_n) {
+    if (idx < 0 || idx >= ui_sidebar_count()) {
         return;
     }
-    const opt_entry_t *o = &g_side_opts[idx];
+    const opt_entry_t *o = ui_sidebar_opt(idx);
+    if (!o) {
+        return;
+    }
     switch (o->action) {
     case OPT_ACTION_PAGE:
         open_page(o->target);      /* push_screen() closes the sidebar */
@@ -903,19 +628,19 @@ static void sidebar_execute(int idx)
         push_screen(UI_SCREEN_MENU);   /* closes the sidebar */
         return;
     }
-    sidebar_close();   /* in-place action (view toggle): close after */
+    ui_sidebar_close();   /* in-place action (view toggle): close after */
 }
 
 /* The sidebar's own key routing while it is open (km_sidebar). */
 static void sidebar_on_key(hal_key_t key)
 {
-    switch (ui_keymap_action(&km_sidebar, key)) {
-    case ACT_MOVE_SEL_UP:   sidebar_move(-1);  break;
-    case ACT_MOVE_SEL_DOWN: sidebar_move(1);   break;
-    case ACT_ACTIVATE:      sidebar_execute(g_side_sel); break;
+    switch (ui_keymap_action(ui_sidebar_keymap(), key)) {
+    case ACT_MOVE_SEL_UP:   ui_sidebar_move(-1);  break;
+    case ACT_MOVE_SEL_DOWN: ui_sidebar_move(1);   break;
+    case ACT_ACTIVATE:      sidebar_execute(ui_sidebar_sel()); break;
     case ACT_OPEN_OPTIONS:  /* re-press closes */
     case ACT_GO_BACK:       /* back closes (does not pop the page) */
-        sidebar_close();
+        ui_sidebar_close();
         break;
     case ACT_GOTO_HOME:     go_home();   /* go_home() closes the sidebar */
         break;
@@ -933,8 +658,8 @@ void ui_shell_show_screen(ui_screen_id_t id)
         lv_obj_add_flag(ui_list_root(ui_home_page()), LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_add_flag(scr_menu, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(scr_stub, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(scr_lock, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_leaf_stub_root(), LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ui_leaf_lock_root(), LV_OBJ_FLAG_HIDDEN);
     if (g_settings) {
         lv_obj_add_flag(ui_list_root(g_settings), LV_OBJ_FLAG_HIDDEN);
     }
@@ -977,23 +702,37 @@ void ui_shell_show_screen(ui_screen_id_t id)
         lv_obj_remove_flag(ui_list_root(g_contacts), LV_OBJ_FLAG_HIDDEN);
         break;
     case UI_SCREEN_STUB:
-        lv_obj_remove_flag(scr_stub, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(ui_leaf_stub_root(), LV_OBJ_FLAG_HIDDEN);
         break;
     case UI_SCREEN_LOCK:
-        lv_obj_remove_flag(scr_lock, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(ui_leaf_lock_root(), LV_OBJ_FLAG_HIDDEN);
         break;
     }
 }
 
-/* Long-press detection (spec §2: held presses = custom actions). A press
- * completes on KEY_UP, so its duration is only known then; the action fires
- * on release. A configurable key held >= LONG_PRESS_MS opens its configured
- * page (ui_heldpress) and suppresses the short-press action; every other key
- * (unconfigured long press, all short presses) behaves exactly as before.
- * Static per-key state: no allocation in the input path. */
-#define LONG_PRESS_MS 500
-static uint32_t key_down_ms[HAL_KEY__COUNT];
-static bool     key_is_down[HAL_KEY__COUNT];
+/* What a completed key press means (ui_input.c measures it and hands the
+ * duration here — spec §2: held presses = custom actions). A configurable
+ * key held >= UI_LONG_PRESS_MS opens its configured page (ui_heldpress) and
+ * suppresses the short-press action; every other key (unconfigured long
+ * press, all short presses) behaves exactly as before. */
+/* KEY_UP intent, in order: the lock gate first (spec §1: while LOCKED only
+ * the keypad unlocks — every other key and every long press is inert), then
+ * a configured long press, then the ordinary short press. */
+static void on_key_released(hal_key_t key, uint32_t held_ms)
+{
+    if (is_locked()) {
+        if (ui_keymap_action(ui_leaf_lock_keymap(), key) == ACT_UNLOCK) {
+            unlock_home();
+        }
+        return;
+    }
+    page_id_t hp = ui_heldpress_target(key);
+    if (held_ms >= UI_LONG_PRESS_MS && hp != PAGE_NONE) {
+        open_page(hp);   /* configured long press: the custom action */
+    } else {
+        on_key(key);     /* short press, or unconfigured key         */
+    }
+}
 
 static void on_key(hal_key_t key)
 {
@@ -1016,7 +755,7 @@ static void on_key(hal_key_t key)
      * END locks. Any other key disarms, so locking needs two ENDs in a
      * row on HOME. (While LOCKED the input path never reaches here —
      * see run_iteration's KEY_UP gate.) */
-    if (key == HAL_KEY_END && !sidebar_open &&
+    if (key == HAL_KEY_END && !ui_sidebar_is_open() &&
         screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
         if (end_armed) {
             do_lock();
@@ -1030,7 +769,7 @@ static void on_key(hal_key_t key)
     /* The options sidebar intercepts every pad key while open: its own
      * contextual keymap decides (re-press/back close, END closes + home,
      * CENTER executes, UP/DOWN move). */
-    if (sidebar_open) {
+    if (ui_sidebar_is_open()) {
         sidebar_on_key(key);
         return;
     }
@@ -1086,6 +825,10 @@ int ui_shell_init(void)
     ui_thread_id = pthread_self();
     ui_thread_set = true;
 
+#ifdef UI_FLUSH_STATS
+    atexit(flush_stats_summary);   /* the UI thread is joined before exit */
+#endif
+
     lv_init();
     lv_tick_set_cb(tick_get_cb);
 
@@ -1102,12 +845,12 @@ int ui_shell_init(void)
                            LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(disp, display_flush_cb);
 
-    lv_indev_t *indev = lv_indev_create();
-    lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
-    lv_indev_set_read_cb(indev, indev_read_cb);
+    ui_input_attach_indev();
+    /* ui_input.c owns the event queue and the gesture state; this file owns
+     * what each intent means (lock gate, long press, page swipe). */
+    ui_input_set_cbs(on_key_released, page_swipe);
     /* Snappier touch sampling than the 16 ms default: drags register in
      * fewer frames (and the harness's --swipe stays deterministic). */
-    lv_timer_set_period(lv_indev_get_read_timer(indev), 10);
 
     /* Palette from the theme layer; fonts loaded here on the UI thread (the
      * tiny_ttf glyph cache must be created in this LVGL context). The SIZES
@@ -1149,8 +892,8 @@ int ui_shell_init(void)
     build_heldpress_screen();
     build_callhist_screen();
     build_contacts_screen();
-    build_stub_screen();
-    build_lock_screen();
+    ui_leaf_build_stub(content_area);   /* stub leaf (ui_leaf.c)   */
+    ui_leaf_build_lock(content_area);   /* lock screen (ui_leaf.c) */
 
     /* The renderer's page pool is a compile-time size: a page that failed to
      * build must be reported here, not crash the first time it is shown. */
@@ -1161,7 +904,8 @@ int ui_shell_init(void)
     }
 
     /* The sidebar is created last so it draws above the content screens. */
-    build_sidebar();
+    ui_sidebar_build(scr_root);
+    ui_sidebar_set_activate_cb(sidebar_execute);
 
     build_softkey_bar(root);
 
@@ -1244,67 +988,7 @@ void ui_shell_run_iteration(void)
         end_armed = false;   /* a direct screen request resets the state */
     }
 
-    hal_input_event_t ev;
-    while (hal_input_poll(&ev)) {
-        switch (ev.type) {
-        case HAL_INPUT_TOUCH_DOWN:
-            touch_state.pressed = true;
-            touch_state.x = ev.u.touch.x;
-            touch_state.y = ev.u.touch.y;
-            swipe_state.active = true;
-            swipe_state.x0 = ev.u.touch.x;
-            swipe_state.y0 = ev.u.touch.y;
-            swipe_state.fired = false;
-            break;
-        case HAL_INPUT_TOUCH_MOVE:
-            touch_state.x = ev.u.touch.x;
-            touch_state.y = ev.u.touch.y;
-            if (swipe_state.active && !swipe_state.fired) {
-                int dx = ev.u.touch.x - swipe_state.x0;
-                int dy = ev.u.touch.y - swipe_state.y0;
-                /* A sideways-dominant drag past the threshold is a swipe
-                 * (spec §1); it fires once per drag. */
-                if ((dx > SWIPE_MIN_PX || dx < -SWIPE_MIN_PX) &&
-                    (dy > -abs(dx) && dy < abs(dx))) {
-                    swipe_state.fired = true;
-                    page_swipe(dx < 0 ? 1 : -1);   /* left=next, right=prev */
-                }
-            }
-            break;
-        case HAL_INPUT_TOUCH_UP:
-            touch_state.pressed = false;
-            swipe_state.active = false;
-            break;
-        case HAL_INPUT_KEY_DOWN:
-            key_down_ms[ev.u.key] = tick_get_cb();
-            key_is_down[ev.u.key] = true;
-            break;
-        case HAL_INPUT_KEY_UP: {
-            uint32_t dur = key_is_down[ev.u.key]
-                               ? tick_get_cb() - key_down_ms[ev.u.key]
-                               : 0;   /* stray UP without a DOWN */
-            key_is_down[ev.u.key] = false;
-            if (is_locked()) {
-                /* While locked only the keypad unlocks (spec §1): every
-                 * other key — and every long press — is inert. */
-                if (ui_keymap_action(&km_lock, ev.u.key) == ACT_UNLOCK) {
-                    unlock_home();
-                }
-                break;
-            }
-            page_id_t hp = ui_heldpress_target(ev.u.key);
-            if (dur >= LONG_PRESS_MS && hp != PAGE_NONE) {
-                open_page(hp);   /* configured long press: the custom action */
-            } else {
-                on_key(ev.u.key);   /* short press, or unconfigured key      */
-            }
-            break;
-        }
-        case HAL_INPUT_NONE:
-        default:
-            break;
-        }
-    }
+    ui_input_poll();
     lv_timer_handler();
 }
 

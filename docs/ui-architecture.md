@@ -167,6 +167,13 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 - [x] **Touch:** tap rows and action-bar caps, drag-to-scroll, sideways drag cycles
       category strips. Deterministic touch injection in the harness.
 - [x] **Golden frames:** `just shot-desktop` freezes the clock, so a frame is reproducible.
+- [x] **Shell split into concern modules** (pure reorganization, every frame byte-identical):
+      `ui_shell.c` keeps the frame/chrome, screen stack, request plumbing and the key
+      dispatcher (the composition root); the rest moved out by concern —
+      `ui_home` (chat list), `ui_mainmenu` (category carousel + layout sync),
+      `ui_sidebar` (options overlay, incl. the shared row paint), `ui_leaf` (lock + stub),
+      `ui_input` (HAL event pump → key/swipe intents). The single "paint a row" helper
+      `ui_row_style()` in `ui_menu.c` is used by both the renderer and the sidebar.
 
 **Still open (deliberately out of the UI build-out):**
 - Maps pages are stub leaves; opening a conversation / composing is not wired.
@@ -191,14 +198,15 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 A page is data, but it still touches five places. This is the whole list, in order:
 
 1. **Data:** a `menu_t` (title, items with `label`/`icon`/optional `sub`/`meta`/`badge`/
-   `target`, optional `cats` strip, and its own `keymap_t`) — either a small `ui_<page>.{h,c}`
-   module following `ui_settings.c`, or a `static const` table in `ui_shell.c` like the
-   main-menu categories.
+   `target`, optional `cats` strip, and its own `keymap_t`) in a small `ui_<page>.{h,c}`
+   module following `ui_settings.c` — the page owns its data, its `menu_t` and its keymap,
+   and exposes one build call plus `page()`/`keymap()` accessors (see `ui_home`, `ui_mainmenu`).
 2. **Target id:** add it to `page_id_t` in `ui/ui_menu.h` if something opens it.
 3. **Build:** build it once in `ui_shell_init()` and raise `LIST_POOL` in `ui/ui_menu.c`
    (that constant is the app's whole page budget; the shell prints an error if it runs out).
 4. **Routing:** a `ui_screen_id_t` in `ui/ui_shell.h`, then a case in `ui_shell_show_screen()`,
-   `page_keymap()`, `move_selection()`, `activate()`, and `open_page()` if it is a target.
+   `page_keymap()`, `move_selection()`, `activate()`, and `open_page()` if it is a target —
+   all in `ui_shell.c`, which is the only place that knows the screen stack.
 5. **Options:** a row table for it in `ui/ui_options.c` (the SHOULDER-L sidebar).
 
 Appearance needs no work: colours come from `ui_palette()`, sizes from the `UI_*` tokens,
@@ -208,11 +216,17 @@ so a new page matches the others automatically.
 
 The simulator hides costs the device will pay. They are known, not solved:
 
-- **Full-frame flush.** LVGL renders partial regions (`LV_DISPLAY_RENDER_MODE_PARTIAL`), but
-  the flush callback copies into the full framebuffer and calls
-  `hal_display_blit(frame, 320*480*2)` — the HAL contract only offers a full-frame push
-  (`hal/hal_display.h`). On the S3 that is a 307 KB SPI write per flush. The HAL needs an
-  area blit (`x1,y1,x2,y2`) and the display backend a matching partial write.
+- **Full-frame flush — SOLVED (26/11).** The HAL contract now offers a region blit,
+  `hal_display_blit_area(pixels, x, y, w, h)` (`hal/hal_display.h`; `hal_display_blit`
+  is a thin full-panel wrapper over it). `display_flush_cb()` still updates the shadow
+  framebuffer row by row (frame dumps and the browser viewport read it) but presents
+  only the dirty LVGL area — straight from the render buffer, whose rows are packed
+  `w*2` bytes with no stride. The host backend copies just the region rows and uploads
+  one window rect; on the S3 this becomes a partial SPI write per flush instead of a
+  fixed 307 KB. Flush cost is measurable: build the host with `-DFLUSH_STATS=ON`
+  (`just build-desktop-stats`) for a bytes/flush-count/largest-area summary at exit.
+  Measured on boot ↦ chat list ↦ d-pad move ↦ menu: 1,228,800 B full-frame vs
+  639,616 B region (47.9% less), frames pixel-identical.
 - **Rows are rebuilt, not recycled.** `rebuild_rows()` deletes and recreates every row's
   LVGL objects on each category cycle / value refresh (chat list = ~33 rows × 4 labels).
   That is fine on a desktop, but it is allocation churn on the device; a fixed row pool that

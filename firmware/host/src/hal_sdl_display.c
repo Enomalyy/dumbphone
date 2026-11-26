@@ -94,17 +94,29 @@ void hal_display_info(hal_display_info_t *out)
     out->bpp = 16;
 }
 
-/* Rebuild the window from the panel buffer + bezel. Caller holds gfx_lock. */
-static int compose_and_present(void)
+/* Rebuild the window from the panel buffer + bezel. Caller holds gfx_lock.
+ * `panel_area` (panel pixels) selects which part of the recess to
+ * re-compose; NULL re-composes the whole window, bezel included. */
+static int compose_and_present(const SDL_Rect *panel_area)
 {
-    /* 1. bezel + unused keys (cached) */
-    SDL_BlitSurface(bezel_bg, NULL, compose, NULL);
+    if (!panel_area) {
+        /* 1. bezel + unused keys (cached) */
+        SDL_BlitSurface(bezel_bg, NULL, compose, NULL);
+    }
 
-    /* 2. the panel, scaled into its recess */
+    /* 2. the panel (or its dirty part), scaled into its recess. The dst
+     * edges come from the scaled region boundaries so tiling areas cover
+     * the recess exactly — no seams between adjacent flushes. */
     int px, py, pw, ph;
     bezel_panel_rect(&px, &py, &pw, &ph);
-    SDL_Rect dst = { px, py, pw, ph };
-    if (SDL_BlitScaled(fb_surface, NULL, compose, &dst) != 0) {
+    const SDL_Rect *src = panel_area ? panel_area
+                                     : &(const SDL_Rect){0, 0, FB_W, FB_H};
+    SDL_Rect dst;
+    dst.x = px + (int)(((uint64_t)src->x * pw) / FB_W);
+    dst.y = py + (int)(((uint64_t)src->y * ph) / FB_H);
+    dst.w = (int)(((uint64_t)(src->x + src->w) * pw) / FB_W) - dst.x;
+    dst.h = (int)(((uint64_t)(src->y + src->h) * ph) / FB_H) - dst.y;
+    if (SDL_BlitScaled(fb_surface, src, compose, &dst) != 0) {
         return -1;
     }
 
@@ -119,29 +131,49 @@ static int compose_and_present(void)
         }
     }
 
-    /* 4. present */
+    /* 4. present — the whole window for a full re-compose, only the
+     * updated recess region for a partial one. */
     SDL_Surface *ws = SDL_GetWindowSurface(window);
     if (ws) {
-        SDL_BlitSurface(compose, NULL, ws, NULL);
-        SDL_UpdateWindowSurface(window);
+        if (panel_area) {
+            SDL_BlitSurface(compose, &dst, ws, &dst);
+            SDL_UpdateWindowSurfaceRects(window, &dst, 1);
+        } else {
+            SDL_BlitSurface(compose, NULL, ws, NULL);
+            SDL_UpdateWindowSurface(window);
+        }
     }
     return 0;
 }
 
-int hal_display_blit(const void *pixels, size_t len_bytes)
+int hal_display_blit_area(const void *pixels, uint16_t x, uint16_t y,
+                          uint16_t w, uint16_t h)
 {
-    if (!window || !fb_surface || !compose || !gfx_lock || !pixels ||
-        len_bytes < sizeof frame) {
+    if (!window || !fb_surface || !compose || !gfx_lock || !pixels) {
+        return -1;
+    }
+    if (w == 0 || h == 0 || x + w > FB_W || y + h > FB_H) {
         return -1;
     }
     int rc;
     SDL_LockMutex(gfx_lock);
-    if (pixels != frame) {
-        memcpy(frame, pixels, sizeof frame);
+    const uint8_t *src = (const uint8_t *)pixels;
+    for (uint16_t ry = 0; ry < h; ry++) {
+        memcpy(&frame[(size_t)(y + ry) * FB_W + x], src + (size_t)ry * w * 2,
+               (size_t)w * 2);
     }
-    rc = compose_and_present();
+    SDL_Rect area = { x, y, w, h };
+    rc = compose_and_present(&area);
     SDL_UnlockMutex(gfx_lock);
     return rc;
+}
+
+int hal_display_blit(const void *pixels, size_t len_bytes)
+{
+    if (len_bytes < sizeof frame) {
+        return -1;
+    }
+    return hal_display_blit_area(pixels, 0, 0, FB_W, FB_H);
 }
 
 int hal_display_set_backlight(uint8_t percent)
@@ -171,7 +203,7 @@ void hal_display_set_key_pressed(int index, bool pressed)
     key_held[index] = pressed;
     /* Redraw now: LVGL may not flush for a second, and a held key has to
      * look held immediately. */
-    compose_and_present();
+    compose_and_present(NULL);
     SDL_UnlockMutex(gfx_lock);
 }
 

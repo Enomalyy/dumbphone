@@ -8,6 +8,7 @@ compile_commands.json
 
 # Tier-1 desktop build artifacts
 build-host/
+build-host-stats/
 
 # LVGL is vendored by `just vendor` at a pinned tag; the tree carries the pin, not the copy.
 vendor/lvgl/

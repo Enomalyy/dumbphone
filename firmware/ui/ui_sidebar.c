@@ -103,8 +103,8 @@ void ui_sidebar_build(lv_obj_t *parent)
     /* Last child of root: drawn above the content screens. It covers only
      * the content area — the pinned status/softkey bars stay clear. */
     scr_sidebar = lv_obj_create(parent);
-    lv_obj_set_size(scr_sidebar, SIDEBAR_W, CONTENT_H);
-    lv_obj_set_pos(scr_sidebar, 0, CONTENT_Y);
+    lv_obj_set_size(scr_sidebar, SIDEBAR_W, UI_CONTENT_H);
+    lv_obj_set_pos(scr_sidebar, 0, UI_CONTENT_Y);
     lv_obj_remove_flag(scr_sidebar, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(scr_sidebar, pal->bg, 0);
     lv_obj_set_style_bg_opa(scr_sidebar, LV_OPA_COVER, 0);
@@ -202,6 +202,14 @@ bool ui_sidebar_is_open(void)
 int ui_sidebar_sel(void)
 {
     return g_side_sel;
+}
+
+const opt_entry_t *ui_sidebar_opt(int idx)
+{
+    if (idx < 0 || idx >= g_side_n || !g_side_opts) {
+        return NULL;
+    }
+    return &g_side_opts[idx];
 }
 
 int ui_sidebar_count(void)

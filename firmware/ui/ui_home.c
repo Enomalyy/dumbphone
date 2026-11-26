@@ -5,7 +5,7 @@
  * per-category item slices), the page's menu_t + its contextual keymap, and
  * the category cycling. Exposes: ui_home_build / ui_home_page /
  * ui_home_keymap / ui_home_cycle_cat (ui_home.h). Must not touch: navigation
- * state, the screen stack, key routing — those live in ui_input.c; appearance
+ * state, the screen stack, key routing — those live in ui_shell.c; appearance
  * in ui_theme.h + ui_menu.c.
  */
 

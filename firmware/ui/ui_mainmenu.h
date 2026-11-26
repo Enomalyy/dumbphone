@@ -6,7 +6,7 @@
  * category cycles, rendered as carousel or grid per the settings' menu
  * style. This module owns the category/item tables, the page's menu_t +
  * its contextual keymap, and the cycling/layout sync. The renderer
- * (ui_menu.c) draws it; input & navigation (ui_input.c) routes its keys.
+ * (ui_menu.c) draws it; the shell (ui_shell.c) routes its keys.
  *
  * Data + one build call: no navigation state, no key handling here.
  */

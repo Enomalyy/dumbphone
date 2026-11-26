@@ -5,8 +5,8 @@
  * (ALL · FAMILY · UNREAD · FAVORITES · ARCHIVED, cycled with d-pad L/R).
  * This module owns the chat data adapter: it resolves the target's chat
  * source (chat_model.h) into per-category item slices and points the page's
- * `items` at the active slice. The renderer (ui_menu.c) draws it; input &
- * navigation (ui_input.c) routes its keys through ui_home_keymap().
+ * `items` at the active slice. The renderer (ui_menu.c) draws it; the shell
+ * (ui_shell.c) routes its keys through ui_home_keymap().
  *
  * Data + one build call: no navigation state, no key handling here.
  */

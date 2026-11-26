@@ -14,6 +14,11 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+# Optional flush instrumentation: counts the bytes/areas pushed through
+# hal_display_blit* and prints a summary at exit. Off by default — the
+# normal build is untouched (see `just build-desktop-stats`).
+option(FLUSH_STATS "instrument LVGL flushes with byte/area counters" OFF)
+
 add_compile_options(-Wall -Wextra -Wno-unused-parameter)
 
 # ---- dependencies ---------------------------------------------------------
@@ -69,7 +74,10 @@ add_executable(dumbphone-desktop
     src/hal_stubs.c
     ${FW_DIR}/ui/ui_shell.c
     ${FW_DIR}/ui/ui_home.c
+    ${FW_DIR}/ui/ui_input.c
+    ${FW_DIR}/ui/ui_leaf.c
     ${FW_DIR}/ui/ui_mainmenu.c
+    ${FW_DIR}/ui/ui_sidebar.c
     ${FW_DIR}/ui/ui_keymap.c
     ${FW_DIR}/ui/ui_theme.c
     ${FW_DIR}/ui/ui_menu.c
@@ -92,6 +100,12 @@ target_compile_definitions(dumbphone-desktop PRIVATE
     FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts"
     CHAT_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/chats.json"
 )
+
+# Optional flush instrumentation (see `just build-desktop-stats`): counts
+# the bytes/areas pushed through hal_display_blit*, summary at exit.
+if(FLUSH_STATS)
+    target_compile_definitions(dumbphone-desktop PRIVATE UI_FLUSH_STATS=1)
+endif()
 
 target_link_libraries(dumbphone-desktop PRIVATE
     lvgl

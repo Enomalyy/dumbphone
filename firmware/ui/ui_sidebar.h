@@ -14,8 +14,9 @@
 
 #include "lvgl.h"
 
-#include "ui_keymap.h"    /* keymap_t        */
-#include "ui_shell.h"     /* ui_screen_id_t  */
+#include "ui_keymap.h"   /* keymap_t        */
+#include "ui_options.h"  /* opt_entry_t     */
+#include "ui_shell.h"    /* ui_screen_id_t  */
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,10 @@ void ui_sidebar_move(int step);
 
 /* Index of the selected option (always valid while open: 0 when empty). */
 int ui_sidebar_sel(void);
+
+/* The entry at `idx` in the open table (NULL when out of range) — the shell
+ * reads the action/target to execute it. */
+const opt_entry_t *ui_sidebar_opt(int idx);
 
 /* Number of options in the open table (0 when closed). */
 int ui_sidebar_count(void);
