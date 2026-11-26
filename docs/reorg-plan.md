@@ -121,9 +121,12 @@ that layout, so any move has to start in the private tree.
 
 ## 4. Decisions only Eli can make
 
-1. **License.** The repo has none, so nobody can legally reuse or contribute to it.
-   MIT/Apache-2.0 (most reusable) or GPL-3.0 (forks stay open).
-2. **Outside contributions to the mirror.** Port PRs by hand (what this one assumes), accept
-   patches as issues instead, or make GitHub the source of truth for `firmware/`.
-3. **Which of R1–R5 become issues**, and where they sit relative to Stages 0–D.
-4. **Supported dev platforms.** Linux only (WSL2 on Windows), or native Windows/macOS too.
+**All four were answered by Eli on 26/11** — kept here as the record:
+1. **License: MPL-2.0** (`a8673c2a`) — file-level copyleft, commercial use allowed, the door to
+   relicensing left open by the DCO sign-off rule in `CONTRIBUTING.md`.
+2. **Outside contributions: port them.** Read, verify every claim here, land as our commits with the
+   author credited; the mirror is never a merge target. Asher's `psyborg-protocols` is expected to
+   send more reviews — each one is audited like #6 was, not applied.
+3. **R1–R5 are in the plan**: designed in spec §16 and ordered in `ROADMAP.md`; R1, R3 and R5 have
+   issues (#7, #8, #9), R4 is folded into Stage D (#5).
+4. **Platforms: Linux/WSL2 only** for now; other hosts are a port someone can do when needed.

@@ -749,11 +749,18 @@ simulator into a device.
 
 - **A change that moves pixels names the frames it moves.** Golden frames stay AE=0 unless the
   commit says which ones changed and why. `just golden-check` is what makes this enforceable.
-- **The mirror is a publish artifact.** Port PRs into the private tree; never make GitHub the source
-  of truth for `firmware/`. Outside contributions are read, verified, and landed as our commits with
-  authorship recorded (`CONTRIBUTING.md` asks them for `-s`).
+- **The mirror is a publish artifact — never a merge target.** Port PRs into the private tree;
+  never make GitHub the source of truth for `firmware/`. Outside contributions are read, **every
+  claim verified here before it lands**, and landed as our commits with the author credited in the
+  message (`CONTRIBUTING.md` asks them for `-s`). *Decided by Eli, 26/11.* **Asher Burrows'
+  `psyborg-protocols` is expected to send further reviews** — treat each as a review to audit, not a
+  patch to apply: reproduce the bug it claims, check the fix, port it, and reply on the PR with the
+  landing commit.
 - **Two things in the mirror are not bugs:** relative doc links that resolve in the private layout,
   and references to `ESP32 phone.txt`, `relay/`, `datasheets/`, `transcripts/` — deliberately
   unpublished. Do not "fix" either.
 - **Do not move docs or screenshots in the mirror**; `publish.sh` decides that layout, so a move has
   to start in the private tree.
+- **Platforms: Linux (and WSL2) only, for now.** *Decided by Eli, 26/11* — other hosts are a port
+  somebody can do when they need it, and it is straightforward; no work goes into supporting them
+  pre-emptively. R1's gate therefore targets one host, not a matrix.
