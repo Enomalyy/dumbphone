@@ -6,9 +6,12 @@ Two build paths share this tree, deliberately independent:
 |---|---|---|
 | **ESP32-S3** (real device image) | ESP-IDF v5.5, target `esp32s3` | `just build-s3`, `just run-qemu`, `just flash-s3` |
 | **Linux desktop** (Tier-1 simulator) | plain CMake + SDL2 + LVGL v9.4.0 | `just build-desktop`, `just run-desktop`, `just shot-desktop` |
+| **WebAssembly** (same simulator, in a page) | Emscripten (`-sUSE_SDL=2`, single-threaded) | `just build-web` → `web/dist/`, published by `web/deploy.sh` |
 
 Both are wired through `just` so the harness never needs an IDE. Build workflow and the
 three-tier virtualization plan: `../harness-setup.md`. What the OS becomes: `../firmware-architecture.md`.
+The web build (live at <https://enomalyy.github.io/dumbphone/>) has its own notes — build,
+deploy, size budget, and what is excluded — in [`../web/README.md`](../web/README.md).
 
 ## Layout
 

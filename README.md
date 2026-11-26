@@ -70,3 +70,12 @@ backbone (a WhatsApp bridge over Wi-Fi) and the S3 HAL backends are next.
 Design docs: [`docs/ui-architecture.md`](docs/ui-architecture.md) ·
 [`docs/firmware-architecture.md`](docs/firmware-architecture.md) ·
 [`docs/audit-report-2026-11-26.md`](docs/audit-report-2026-11-26.md)
+
+## Licence
+
+Mozilla Public License 2.0 — see [`LICENSE`](LICENSE). You may build on this, including commercially,
+and combine it with code under other licences; if you modify the project's own files, those
+modifications must be published under the same terms.
+
+Contributions welcome — read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. Commits need a
+`Signed-off-by` line (`git commit -s`).

@@ -75,23 +75,6 @@ static void *ui_thread(void *arg)
     return NULL;
 }
 
-#ifdef __EMSCRIPTEN__
-/* WebAssembly build (web/build.sh): GitHub Pages cannot set COOP/COEP
- * headers, so SharedArrayBuffer is unavailable and -pthread is off the
- * table. main() therefore only initialises; the page's own
- * requestAnimationFrame loop (web/index.html) drives one pump per frame via
- * web_frame_pump() (web_hooks.c), which drains SDL's DOM events (mouse/
- * keyboard -> hal_input_sdl_event, the same path as the desktop pump) and
- * then runs the SAME ui_shell_run_iteration() the desktop UI thread does.
- * ui/ is untouched; only this entry point changes shape.
- *
- * (Emscripten 7's built-in rAF wrappers — emscripten_set_main_loop /
- * emscripten_request_animation_frame_loop — registered their C callback
- * from here but never fired it in our verification environment, while a
- * plain page-side rAF + ccall runs at a steady 60fps.)
- */
-#endif
-
 /* Write the pure panel framebuffer (RGB565) as a binary PPM (RGB888). */
 static int write_ppm(const char *path)
 {
@@ -393,15 +376,24 @@ int main(int argc, char **argv)
     }
 
 #ifdef __EMSCRIPTEN__
-    /* Single-threaded web entry: initialise the shell here (the desktop
-     * build does it on the UI thread), then hand control to the rAF main
-     * loop, which never returns. */
+    /* WebAssembly build (web/build.sh): GitHub Pages cannot set COOP/COEP
+     * headers, so SharedArrayBuffer is unavailable and -pthread is off the
+     * table. main() therefore only initialises the shell here (desktop does
+     * it on the UI thread); the page's own requestAnimationFrame loop
+     * (web/index.html) then drives one web_frame_pump() per frame
+     * (web_hooks.c), which drains SDL's DOM events (mouse/keyboard ->
+     * hal_input_sdl_event, the same path as the desktop pump) and runs the
+     * SAME ui_shell_run_iteration() the desktop UI thread does. ui/ is
+     * untouched; only this entry point changes shape.
+     *
+     * (Emscripten 7's built-in rAF wrappers — emscripten_set_main_loop /
+     * emscripten_request_animation_frame_loop — registered their C callback
+     * from here but never fired it in our verification environment, while a
+     * plain page-side rAF + ccall runs at a steady 60fps.) */
     if (ui_shell_init() != 0) {
         fprintf(stderr, "[ui] ui_shell_init failed\n");
         return 1;
     }
-    /* The page's rAF loop now owns the pump (web_frame_pump); main() is
-     * done. */
     return 0;
 #endif
 
