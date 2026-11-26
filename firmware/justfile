@@ -148,3 +148,10 @@ clean-all: clean
 #   just picker          -> http://<this machine>:8096/
 picker: build-desktop
     python3 ../tools/geom-picker.py
+
+# Publish the live demo in one step: build the WebAssembly bundle and push it to
+# gh-pages. This is the only deployment that is not automatic — the repo mirror
+# follows every commit by itself (the post-commit hook runs dumbphone/publish.sh).
+# Takes a few minutes: the whole UI + LVGL is compiled by emcc.
+publish-web: build-web
+    ../web/deploy.sh
