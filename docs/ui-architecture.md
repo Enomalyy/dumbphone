@@ -330,7 +330,13 @@ absorbed, and the Stage 0 chapter once it shipped — now lives in [`decisions.m
 The spec keeps only what is still the design: §14 (the UI wave, Stages A–D) and §16 (the structural
 work, R1–R5).
 
-## 14. The big UI wave (26/11, Eli's voice note) — SPECIFIED, NOT BUILT
+## 14. The big UI wave (26/11, Eli's voice note) — A BUILT; B, C, D NOT BUILT
+
+**Status (27/11):** §14.9–§14.12 are built — one nine-role palette with DARK and LIGHT, a real
+apply pass, Settings → Display (Theme / Font / Menu Style / Softkey bar), and the font mechanism
+with three roles. `just check-colours` fails the build on any colour literal outside the palette
+tables. §14.1–§14.8 are Stage B and C and are not built. The typeface question is still open:
+the faces are selectable, and none has been declared the winner.
 
 Eliyahu's list, to be executed as ONE wave (relay legs), then audited as before. Ordering matters:
 §14.7 depends on nothing else, but §14.1–§14.6 all land in the renderer/shell, so they must be one
@@ -485,81 +491,6 @@ and an 8bpp baked Pixelify on the small one. **That split is provisional and is 
 record** — it was produced by a session that then wrongly attributed it to Eliyahu. Do not treat it
 as settled, and do not cite it as a rationale. It stays only until this setting exists and Eli tunes
 it by hand.
-
-**14.9 Hide the softkey bar (Settings → Display).**
-A toggle that removes the bottom context bar and lets the content area take that space. It is a
-layout change, not a cosmetic one: `SOFTKEYS_H` becomes a runtime value, the content area resizes,
-and every built page re-lays out (or is rebuilt) on the toggle. When hidden, the legend is gone —
-the physical keys still do what the keymap says; that is the accepted trade. Ship it defaulting to
-*shown*.
-
-**14.10 Colour: one role table, all menus, switchable palettes.**
-Every colour in the UI is a *role*, defined once and used by every page and every menu type. Pages
-never name a colour — they ask for a role. A palette is a table of role → RGB565. Adding a theme is
-adding one entry to the palette table; nothing else changes (Eli, 26/11).
-
-The roles (this is the complete list — anything not here does not get its own colour):
-
-| Role | What it paints | Palette A (today) | Palette B (light) |
-|---|---|---|---|
-| `GROUND` | page background | near-black charcoal | white |
-| `SURFACE` | rows, cells, panels | dark slate | white / very light grey |
-| `BORDER` | frames, rails, dividers | dark slate | light blue-grey |
-| `TEXT` | primary text | off-white | black |
-| `TEXT_DIM` | meta, timestamps, previews | muted grey-green | grey |
-| `ACCENT` | icons, active tab, selection text | green | **bright orange** |
-| `HIGHLIGHT` | selection fill | green fill | **bright orange fill** |
-| `ACCENT_ALT` | secondary accent, category glyphs | cyan | light blue |
-| `ON_HIGHLIGHT` | text drawn on a highlight fill | near-black | black |
-
-Notes that make it usable rather than just tidy:
-- `ACCENT` and `HIGHLIGHT` are distinct roles even when a palette gives them the same colour — a
-  theme is allowed to make them differ, and several real themes do.
-- Contrast is a palette-level obligation, checked when the palette is added, not per page:
-  `TEXT` and `TEXT_DIM` must clear 4.5:1 on `GROUND` and `SURFACE`; `ON_HIGHLIGHT` must clear
-  4.5:1 on `HIGHLIGHT`. (Orange text on white is 2.6:1 — that is why orange is an accent/highlight
-  and never a text colour on a light ground.)
-- **Enforcement, not convention:** no RGB literal may appear outside the palette table. Add a check
-  to the build or a test that greps the UI for colour literals and fails if one escapes. Without
-  that, drift is guaranteed within two weeks.
-- **Images are assets, not colours.** The UI will draw JPEG/PNG content (wallpapers, icons, later
-  photo attachments). Those carry their own pixels and are *not* recoloured by a theme — a theme
-  selects *which* asset is used, it does not tint it. So the rule is: every colour the code
-  *generates* comes from a role; a decoded bitmap is data and passes through untouched. Where text
-  must stay legible over an image, use a scrim role (a role with alpha) rather than picking a text
-  colour that happens to work on that particular picture.
-- Consequently a theme owns its own wallpaper asset (or chooses none); the dark motif does not get
-  reused under a light ground. For now the theme *bundles* its wallpaper — but keep the wallpaper as
-  its own field in the theme struct rather than fused into a single "skin" blob, so a later
-  granular control (pick any wallpaper independently of the palette) is a setting, not a refactor.
-
-
-This is the reason the theme layer exists, and it closes audit §3.6 ("no runtime theme-swap pass"):
-colours must stop being compile-time constants in draw code and become a palette table read through
-the active-theme pointer, with a repaint pass that restyles every live object when the theme
-changes. Anything that cannot be restyled live must be documented as a rebuild-on-switch page.
-
-**14.11 Settings → Display → Themes.**
-The sub-menu that selects the palette. Display becomes a parent page holding *Theme*, *Menu Style*
-(§14.3) and *Softkey bar* (§14.9). Selection applies immediately (no confirm), and the choice
-persists for the session; on-device persistence is still the outstanding settings-store task.
-
-**14.12 Font choice in Settings → Display.**
-A third entry under Display, beside Theme and Menu Style: *Font*, cycling the UI typeface (Eli,
-26/11). Requirements:
-
-- The choices are the body typeface; the chrome face (Silkscreen) is part of the product's identity
-  and stays fixed unless Eli says otherwise. Flag it rather than assume silently.
-- Every offered face is baked at the body sizes, exactly like Pixelify Sans (8-bit) —
-  the crispness rule (§14.10's discipline; VT323 was kept for the large face on
-  Eliyahu's call, 26/11) applies to any font that is selectable.
-  A selectable-but-antialiased face would undo the typography work.
-- Candidates already evaluated for look: Pixelify Sans (current), Jersey 10, DotGothic16. Each costs
-  tens of KB of flash at 8bpp for the ASCII range at two sizes — report the bundle delta.
-- Switching applies immediately through the same restyle pass as a theme change (§14.10), because
-  both are appearance-only and both must not touch navigation.
-- The selected font persists for the session alongside the theme; on-device persistence is still the
-  outstanding settings-store task.
 
 ## 16. Structural work — folded from the outside review (26/11)
 
