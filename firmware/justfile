@@ -1,0 +1,112 @@
+# dumbphone firmware — deterministic CLI targets. Never drive the build from an IDE.
+#
+# Two independent build paths share this tree:
+#   * ESP32-S3 (the real device image)  -> ESP-IDF, needs env.sh sourced
+#   * Linux desktop (Tier-1 simulator)  -> plain CMake + SDL2 + LVGL
+#
+# ESP-IDF env (see env.sh) wraps export.sh + the qemu-xtensa bits, keeping all
+# of it out of the global login profile so bare `python3` stays the system
+# interpreter.
+
+idf_export := "$HOME/dumbphone/firmware/env.sh"
+
+# ---- ESP32-S3 target (the real device image) -----------------------------
+
+# Build for the ESP32-S3 target.
+build-s3:
+    . {{idf_export}} && idf.py set-target esp32s3 && idf.py build
+
+# Boot the built image under Espressif's xtensa QEMU and stream UART.
+run-qemu:
+    . {{idf_export}} && idf.py qemu monitor
+
+# Flash a tethered board over USB.
+flash-s3:
+    . {{idf_export}} && idf.py -p ${ESPPORT:-/dev/ttyACM0} flash monitor
+
+# ---- Tier 1: Linux desktop simulator (SDL2 + LVGL) -----------------------
+
+# LVGL is vendored and pinned; `just vendor` fetches it on a fresh clone.
+lvgl_tag := "v9.4.0"
+window_scale := "1"     # presentation scale for the mock-up (panel + bezel)
+deps_prefix := env_var_or_default("DEPS_PREFIX", env_var("HOME") + "/dev-deps")
+
+# Fetch the pinned LVGL tree (idempotent).
+vendor:
+    @if [ -f vendor/lvgl/lvgl.h ]; then \
+        echo "vendor/lvgl present ({{lvgl_tag}})"; \
+    else \
+        git clone --depth 1 --branch {{lvgl_tag}} https://github.com/lvgl/lvgl.git vendor/lvgl; \
+    fi
+
+# Configure + compile the native desktop simulator.
+build-desktop: vendor
+    cmake -S host -B build-host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DDEPS_PREFIX={{deps_prefix}}
+    cmake --build build-host -j$(nproc)
+
+# Open the simulator window (bezelled mock-up; scale auto-fits the display).
+# Also serves the browser viewport on the tailnet (--no-server to disable).
+run-desktop: build-desktop
+    ./build-host/dumbphone-desktop
+
+# Harness target: headless PANEL frame (320x480 device pixels) for golden diffs.
+# Shot mode freezes the clock at 20:36, so frames are reproducible at any time.
+# screens: chat|menu|settings|speeddials|heldpress|callhist|contacts|stub|lock.
+# cycledir/cyclen inject d-pad presses before the shot, to land a carousel
+# category (e.g. just shot-desktop chat right 1 -> FAMILY). cyclen=0 = none.
+# activate=N injects N full CENTER presses (e.g. toggle a settings row).
+# menustyle=carousel|grid forces the main-menu view (default auto = the
+# in-memory setting); the PNG is named <screen>-<menustyle> when forced.
+# For states one or more named keys produce (e.g. a T9 speed dial from
+# HOME, or the options sidebar: `--key shoulder-l`), call the binary
+# directly: --key <name> [N] ... is repeatable and injects N full presses of
+# each named HAL key in order (digit-1..9, shoulder-l, ok, ...). E.g.
+# `--key shoulder-l --key ok` opens the sidebar then executes its selected
+# option. --hold <ms> holds each press down that long (long-press states;
+# the shell fires at >= 500 ms). --swipe up|down|left|right [dist] is
+# repeatable and injects one deterministic touch drag through the HAL touch
+# path (panel pixels, default dist 120): vertical swipes scroll long lists,
+# horizontal swipes cycle category strips (spec §1). E.g.
+# `--swipe left` on the main menu lands on CALLS. --tap x y is repeatable
+# and injects one point touch (DOWN, brief hold, UP at panel pixels x,y),
+# selecting/executing whatever row sits there.
+shot-desktop screen="chat" cycledir="none" cyclen="0" activate="0" menustyle="auto": build-desktop
+    @mkdir -p ../screenshots build-host/shots
+    ./build-host/dumbphone-desktop --shot build-host/shots/{{screen}}.ppm --screen {{screen}}{{ if cycledir != "none" { " --cycle " + cycledir + " " + cyclen } else { "" } }}{{ if activate != "0" { " --activate " + activate } else { "" } }}{{ if menustyle != "auto" { " --menu-style " + menustyle } else { "" } }}
+    @if command -v magick >/dev/null 2>&1; then \
+        magick build-host/shots/{{screen}}.ppm ../screenshots/{{ if menustyle == "auto" { screen } else { screen + "-" + menustyle } }}.png; \
+        echo "wrote ../screenshots/{{ if menustyle == "auto" { screen } else { screen + "-" + menustyle } }}.png"; \
+    else \
+        echo "wrote build-host/shots/{{screen}}.ppm (install ImageMagick for PNG)"; \
+    fi
+
+# Harness target: the composed mock-up (bezel + panel), optionally holding a key.
+# press = a button id from host/src/bezel.c: vol-up|vol-down|power|up|down|left|right|ok|
+#         shoulder-l|shoulder-r|call|end|digit-0..digit-9|star|hash
+# The file name records both, e.g. window-chat-soft-right.png (MENU held, menu open).
+shot-window screen="chat" press="none": build-desktop
+    @mkdir -p ../screenshots build-host/shots
+    ./build-host/dumbphone-desktop --shot-win build-host/shots/window.ppm --screen {{screen}} --press {{press}} --scale {{window_scale}}
+    @if command -v magick >/dev/null 2>&1; then \
+        magick build-host/shots/window.ppm ../screenshots/window-{{ if press == "none" { screen } else { screen + "-" + press } }}.png; \
+        echo "wrote ../screenshots/window-{{ if press == "none" { screen } else { screen + "-" + press } }}.png"; \
+    else \
+        echo "wrote build-host/shots/window.ppm"; \
+    fi
+
+# Alias kept for harness-setup.md's vocabulary.
+build-host: build-desktop
+
+# Host unit tests: next phase (Unity/CMock), nothing to run yet.
+test-host:
+    @echo "not wired yet: host unit tests (Unity/CMock)"
+
+# ---- housekeeping --------------------------------------------------------
+
+# Wipe ESP-IDF build artifacts (desktop build artifacts stay).
+clean:
+    . {{idf_export}} && idf.py fullclean
+
+# Wipe both.
+clean-all: clean
+    rm -rf build-host

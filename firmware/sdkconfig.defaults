@@ -1,0 +1,10 @@
+# Prototype #1 target: ESP32-S3 (WiFi-only, no cellular modem yet).
+CONFIG_IDF_TARGET="esp32s3"
+
+# 16 MB flash / 8 MB PSRAM is the planned PoC board class; boot/OTA layout is
+# left at IDF defaults for now (Phase 1 scaffold only).
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+
+# Panics decoded to UART, then halt (readable in `idf.py qemu monitor`).
+CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT=y

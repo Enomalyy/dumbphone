@@ -1,0 +1,10 @@
+# build artifacts
+build/
+build-host/
+vendor/lvgl/
+managed_components/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+compile_commands.json
+host/data/
