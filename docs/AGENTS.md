@@ -43,7 +43,8 @@ that relays modern apps (WhatsApp, Mail, Maps, banking) to a thin client.
   (native SDL2 / QEMU / Wokwi + tethered board), test-surface design (UART JSON-RPC, panic hooks,
   framebuffer snapshots).
 - **Hardware ordered (24/11):** Waveshare ESP32-S3-Touch-LCD-3.5 (N16R8, 16 MB flash / 8 MB PSRAM)
-  board from AliExpress — delivery window **9–18/12**. Screen = HP35001-DCT 3.5" IPS (ST7796U +
+  board from AliExpress — **order 1124283904159970** (Waveshare ESP32-S3 3.5in Touch, "3.5 With
+  Camera-Case"), confirmed 26/11; delivery window **9–18/12**. Screen = HP35001-DCT 3.5" IPS (ST7796U +
   GT911), datasheet in `datasheets/`.
 
 Status (26/11): concept phase + **Phase 1 harness** (ESP-IDF v5.5.6, QEMU boots the scaffold).

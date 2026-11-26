@@ -89,6 +89,7 @@ static void *ui_thread(void *arg)
  * emscripten_request_animation_frame_loop — registered their C callback
  * from here but never fired it in our verification environment, while a
  * plain page-side rAF + ccall runs at a steady 60fps.)
+ */
 #endif
 
 /* Write the pure panel framebuffer (RGB565) as a binary PPM (RGB888). */

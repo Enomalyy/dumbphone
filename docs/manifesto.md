@@ -113,3 +113,40 @@ the first satge of prototyping will be building out the software/os side of thin
 **The path forward:** buy the dev board ↦ run the AI models until happy with all the internal software ↦ design his own circuit board in KiCad ("key CAD") ↦ source each component as cheap as possible, build and ship the whole board himself ↦ a dumb phone he built himself — a prototype that could become the final term project (he may run it by some professors first). Even if it never becomes marketable: something to show what he's capable of, document the process online, "flex my muscles".
 
 **Awaiting:** parents' approval + funds (checkout screenshot sent to Mind Meld 24/11).
+
+## Milestones (as of 26/11)
+
+**Done**
+- Concept, manifesto, positioning, honest-scope assessment (above).
+- **Spec hardened** — `ui-architecture.md` is the design authority: navigation model, key semantics,
+  one `menu_t` renderer, theme/design-token layer, §10 the checklist for adding a page, §11 the S3
+  port budget.
+- **Tier-1 desktop simulator** (LVGL 9.4 + SDL2, plain C11): a fully navigable UI — HOME screen with
+  widgets, main-menu carousel + grid, Messaging with a real WAHA chat list and category strip, Calls
+  (history + contacts), Settings with working toggles, speed dials, held-press config, options sidebar,
+  swipe navigation, lock screen. Plus the physical T9 bezel and a browser viewport for testing from a
+  phone or tablet.
+- **Two audits passed.** A 10-leg relay built the UI; a DeepSeek audit found it coherently
+  maintainable; a second review pass fixed two latent bugs (a 10%-small panel, and an array overrun on
+  every startup) and hardened the display-flush contract.
+- **Engineering quality:** region-based display flush (47.9% fewer bytes pushed, fixes the S3 blocker
+  before hardware arrives), Hebrew/RTL/emoji support, the shell split into concern modules, golden-frame
+  regression tests for every screen.
+- **Public repo live:** github.com/Enomalyy/dumbphone — code, docs, and the staged plan as tracked
+  issues (#1–#5).
+
+**Next**
+- **Stage 0 — resolution selector.** Panel geometry becomes runtime so the UI can be seen at 240×320,
+  320×480, 480×800 and friends before a final screen is chosen.
+- **Stage A — appearance.** Colour as a nine-role table used by every page; dark and light palettes as
+  data; Settings → Display holding Theme, Font, Menu Style and the softkey-bar toggle.
+- **Stage B — menu feel.** Tappable category strip, a moving-carousel menu style, larger highlight
+  icons, centred cell text.
+- **Stage C — touch feel.** Uniform drag-scroll and held-down acceleration.
+- **Stage D — conversations.** A real message model and a chat view: bubbles, grouping, timestamps,
+  scrollback. The biggest single stage.
+- **Then silicon**: wire the S3 HAL backends (display, touch), bring up the panel, integrate cellular,
+  battery and the physical keypad. Board arrives 9–18/12.
+
+**Governing rule:** responsiveness comes from input latency, not from motion. The device will be slow;
+the action lands instantly and animation is garnish on top.
