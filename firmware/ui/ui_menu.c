@@ -95,6 +95,23 @@ static list_page_t g_pool[LIST_POOL];
 static int         g_pool_n = 0;
 
 /* ------------------------------------------------------------------ */
+/* Where the rows start: the header slot is the title's own line height, so a
+ * taller HEADERS face pushes the rows down instead of clipping the banner.
+ * At the shipped preference this equals UI_ROWS_Y exactly, so no frame moves
+ * (Eli, 27/11). */
+static int rows_y(void)
+{
+    /* The banner sits in a slot that follows the HEADERS size: one pixel of
+     * extra row space per pixel the preference is bigger than the shipped
+     * size. At the default the arithmetic is exactly UI_ROWS_Y, so no frame
+     * moves; at a 32 px header the rows step down by eight and the banner is
+     * never clipped (Eli, 27/11). Using the preference rather than the face's
+     * line height keeps it deterministic when a shot run starts with --font. */
+    int px = ui_font_pref(UI_FONT_HEADER).px;
+    int extra = px - UI_FONT_TITLE_PX;
+    return ROWS_Y + (extra > 0 ? extra : 0);
+}
+
 /* Small label helpers                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -531,7 +548,7 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
      * items than fit on screen; short lists simply never scroll. The box is
      * a native LVGL scroll target, so pointer drags (swipes) scroll it for
      * free once gestures are wired. */
-    int y0 = ROWS_Y;   /* strip or title: both live in the header slot */
+    int y0 = rows_y();   /* strip or title: both live in the header slot */
     p->rows_box = lv_obj_create(p->root);
     lv_obj_set_size(p->rows_box, PANEL_W, CONTENT_H - y0);
     lv_obj_set_pos(p->rows_box, 0, y0);
@@ -629,6 +646,10 @@ void ui_menu_restyle(void)
         lv_obj_set_style_bg_color(p->root, C_GROUND, 0);
         if (p->title_lbl) {
             lv_obj_set_style_text_color(p->title_lbl, C_TEXT, 0);
+            /* The banner wears the HEADERS role, so a font change has to
+             * reach it too — colours alone left every page title on the face
+             * it was built with (Eli, 27/11). */
+            lv_obj_set_style_text_font(p->title_lbl, ui_font_title(), 0);
         }
         if (p->chev_l) {
             lv_obj_set_style_text_color(p->chev_l, C_ACCENT, 0);
@@ -659,7 +680,7 @@ void ui_menu_relayout(void)
         }
         lv_obj_set_size(p->root, PANEL_W, CONTENT_H);
         if (p->rows_box) {
-            int y0 = ROWS_Y;
+            int y0 = rows_y();
             lv_obj_set_pos(p->rows_box, 0, y0);
             lv_obj_set_size(p->rows_box, PANEL_W, CONTENT_H - y0);
         }

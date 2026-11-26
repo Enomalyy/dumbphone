@@ -1,0 +1,98 @@
+# scenes.txt — the golden-frame recipes, one line per scene (spec §16.1).
+#
+# Format:  <frame> <kind> <flags...>
+#   frame  = the PNG file name in ../screenshots/ (no directory, no .png)
+#   kind   = panel  -> rendered with --shot    (the panel, device pixels)
+#            window -> rendered with --shot-win (bezel + panel compose)
+#   flags  = passed verbatim to build-host/dumbphone-desktop; the vocabulary
+#            is the binary's own CLI (see host/src/main.c): --screen,
+#            --cycle left|right N, --key <name> [N], --activate N,
+#            --swipe up|down|left|right [dist], --tap x y, --press <id>,
+#            --hold <ms>, --menu-style carousel|grid, --theme dark|light,
+#            --font header|text|subtext[:N], --geom WxH, --scale N.
+#
+# Shot mode freezes the clock at 20:36, so every scene is reproducible at
+# any time. `just golden-check` renders each scene and compares it with the
+# committed PNG; `just golden-update` rewrites the frames (the only way they
+# change). A line here is a promise: the frame exists and is made exactly
+# this way.
+#
+# EXCLUDED: browser-viewport.png — a live capture of just run-desktop's web
+# viewport (frame_server JPEG stream at 18 fps); it shows a running app, not
+# a frozen state, so it has no recipe and is not checked.
+
+# ---- panel frames (320x480 default geometry) ------------------------------
+home                    panel --screen home
+chat                    panel --screen chat
+family                  panel --screen chat --cycle right 1
+unread                  panel --screen chat --cycle right 2
+favorites               panel --screen chat --cycle right 3
+archived                panel --screen chat --cycle right 4
+menu                    panel --screen menu
+menu-calls              panel --screen menu --cycle right 1
+menu-settings           panel --screen menu --cycle right 3
+menu-grid               panel --screen menu --menu-style grid
+menu-grid-maps          panel --screen menu --menu-style grid --cycle right 2
+settings                panel --screen settings
+settings-grid           panel --screen settings --menu-style grid
+speeddials              panel --screen speeddials
+heldpress               panel --screen heldpress
+callhist                panel --screen callhist
+contacts                panel --screen contacts
+lock                    panel --screen lock
+stub                    panel --screen stub
+speeddials-cycled       panel --screen speeddials --activate 1
+heldpress-cycled        panel --screen heldpress --activate 1
+heldpress-action        panel --screen home --key shoulder-l --hold 600
+speeddial-mom           panel --screen home --key digit-1
+call-key                panel --screen home --key call
+lock-from-chat          panel --screen chat --key end 2
+callhist-from-menu      panel --screen menu --cycle right 1 --activate 1
+chat-hebrew             panel --screen chat --key down 8
+swipe-scroll            panel --screen chat --swipe up 120
+swipe-chat              panel --screen chat --swipe left 120
+swipe-menu              panel --screen menu --swipe left 120
+tap-row3                panel --screen chat --tap 160 217
+key-down                panel --screen chat --key down
+options-home            panel --screen home --key shoulder-l
+options-menu            panel --screen menu --key shoulder-l
+options-callhist        panel --screen callhist --key shoulder-l
+settings-display        panel --screen settings --key ok
+settings-font           panel --screen settings --key ok --key down --key ok
+settings-font-header32  panel --screen settings --key ok --key down --key ok --font header:1
+chat-light              panel --screen chat --theme light
+menu-light              panel --screen menu --theme light
+settings-light          panel --screen settings --theme light
+options-exec            panel --screen chat --key shoulder-l --key ok
+options-grid            panel --screen menu --key shoulder-l --key down --key ok
+
+# ---- composed window frames (bezel + panel; the only check on the compose
+#      path — host/src/hal_sdl_display.c and host/src/bezel.c) --------------
+window-chat                     window --screen chat --press none --scale 1
+window-menu                     window --screen menu --press none --scale 1
+window-chat-digit-5             window --screen chat --press digit-5 --scale 1
+window-home-480x800             window --screen home --press none --scale 1 --geom 480x800
+window-chat-digit-5-240x320     window --screen chat --press digit-5 --scale 1 --geom 240x320
+
+# ---- non-default geometry frames (<name>-WxH.png, decisions §15) ----------
+home-240x320    panel --screen home --geom 240x320
+chat-240x320    panel --screen chat --geom 240x320
+menu-240x320    panel --screen menu --geom 240x320
+home-240x400    panel --screen home --geom 240x400
+chat-240x400    panel --screen chat --geom 240x400
+menu-240x400    panel --screen menu --geom 240x400
+home-320x240    panel --screen home --geom 320x240
+chat-320x240    panel --screen chat --geom 320x240
+menu-320x240    panel --screen menu --geom 320x240
+home-480x800    panel --screen home --geom 480x800
+chat-480x800    panel --screen chat --geom 480x800
+menu-480x800    panel --screen menu --geom 480x800
+home-480x640    panel --screen home --geom 480x640
+chat-480x640    panel --screen chat --geom 480x640
+menu-480x640    panel --screen menu --geom 480x640
+home-1280x720   panel --screen home --geom 1280x720
+chat-1280x720   panel --screen chat --geom 1280x720
+menu-1280x720   panel --screen menu --geom 1280x720
+home-200x350    panel --screen home --geom 200x350
+chat-200x350    panel --screen chat --geom 200x350
+menu-200x350    panel --screen menu --geom 200x350
