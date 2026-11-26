@@ -17,6 +17,7 @@
 
 static int g_w = 320;
 static int g_h = 480;
+static bool g_softkeys = true;   /* the legend is visible by default */
 
 static int clampi(int v, int lo, int hi)
 {
@@ -54,9 +55,19 @@ int ui_status_h(void)
     return scale_h(26, 18, 44);
 }
 
+void ui_geometry_set_softkeys(bool shown)
+{
+    g_softkeys = shown;
+}
+
+bool ui_geom_softkeys(void)
+{
+    return g_softkeys;
+}
+
 int ui_softkey_h(void)
 {
-    return scale_h(36, 28, 54);
+    return g_softkeys ? scale_h(36, 28, 54) : 0;
 }
 
 int ui_content_y(void)

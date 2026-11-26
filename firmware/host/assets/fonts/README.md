@@ -13,6 +13,9 @@ see "Baked Pixelify Sans" below).
 | `FA-Solid.ttf` | FortAwesome/Font-Awesome 6.5.2 `webfonts/fa-solid-900.ttf` | SIL OFL 1.1 (font), CC BY 4.0 (icons) | 420,332 |
 | `DroidSansHebrew-Regular.ttf` | `google-droid-sans-fonts` package, © 2008 The Android Open Source Project | Apache-2.0 | 30,024 |
 | `NotoEmoji-Subset.ttf` | google/fonts `ofl/notoemoji` (`NotoEmoji[wght].ttf`), subset — see below | SIL OFL 1.1 | 753,788 |
+| `PixelifySans-Regular.ttf` | google/fonts `ofl/pixelifysans` (`PixelifySans[wght].ttf`), instanced at wght=400 | SIL OFL 1.1 | 51,892 |
+| `Jersey10-Regular.ttf` | google/fonts `ofl/jersey10` | SIL OFL 1.1 | 77,732 |
+| `DotGothic16-ASCII.ttf` | google/fonts `ofl/dotgothic16`, subset to Latin-1 — see below | SIL OFL 1.1 | 86,296 |
 
 `DroidSansHebrew-Regular.ttf` is copied unmodified from the installed package
 (`/usr/share/fonts/google-droid-sans-fonts/`). It is a static 30 KB Hebrew-only
@@ -46,10 +49,52 @@ npx lv_font_conv --font PixelifySans-400.ttf --size 16 --bpp 8 --no-compress \
   --format lvgl -r 32-126 -o font_pixelify_m.c
 ```
 
+Any OTHER size of Pixelify (the Font page's ladder) loads
+`PixelifySans-Regular.ttf` — the same font instanced at wght=400 — through
+tiny_ttf, so the shipped 16 px stays pixel-exact while the size is still
+adjustable.
+
 `--no-compress` matters: compressed (RLE) output needs `LV_USE_FONT_COMPRESSED`
 in `lv_conf.h`, which we do not enable. The generated descriptor is const
 rodata; `ui_shell_init()` chains the fallbacks onto a mutable shallow copy
 (`firmware/ui/font_pixelify.h` documents why).
+
+## The three adjustable faces (Settings > Display > Font)
+
+`ui_theme.h` splits the UI's text into three levels — **Headers**, **Text**,
+**Subtext** — and Settings > Display > Font sets the FACE and SIZE of each.
+All five candidate faces are shipped, so the trade can be judged on the panel
+instead of in a meeting; nothing is pruned on taste.
+
+The shipped defaults are the faces the design was drawn with (and every
+golden frame is shot with): Headers = Silkscreen 24, Text = VT323 24,
+Subtext = baked Pixelify Sans 16.
+
+Two of the newer faces are *runtime TTF loads* (tiny_ttf from this directory),
+not baked tables: Pixelify Sans for sizes other than its 16 px design size,
+plus Jersey 10 and DotGothic16. That keeps every size reachable without
+baking a table per (face, size) pair.
+
+**Flash cost per face** — the table reports both ways of shipping a face. The
+TTF column is what this tree actually ships (one file, every size). The baked
+columns are the equivalent LVGL bitmap font for printable ASCII (U+0020-007E)
+at two sizes, measured on the ink bounding box of each glyph plus a 16-byte
+descriptor per glyph and ~1 KiB of tables; 8bpp is what the shipped Pixelify
+subtext uses, 1bpp is the small option §14.12 allows.
+
+| Face | TTF (shipped) | baked 1bpp @16 | baked 1bpp @24 | baked 8bpp @16 | baked 8bpp @24 |
+|---|---:|---:|---:|---:|---:|
+| Silkscreen | 32,220 | 3,610 | 5,045 | 9,090 | 17,220 |
+| VT323 | 153,116 | 3,425 | 4,424 | 7,292 | 12,060 |
+| Pixelify Sans | 51,892 | 3,461 | 4,876 | 8,707 | 15,667 |
+| Jersey 10 | 77,732 | 3,375 | 4,264 | 6,898 | 11,716 |
+| DotGothic16 | 86,296 | 3,674 | 5,378 | 9,948 | 17,719 |
+
+So: a baked ASCII font costs 3-18 KiB per (face, size); the runtime TTFs cost
+their file size once and give every size for free (the S3 keeps them in the
+assets filesystem). DotGothic16 is subset to Latin-1 here (2,069,236 B →
+86,296 B) because the full font also carries the Japanese syllabaries, which
+this UI never draws — and a runtime TTF is read whole.
 
 ## Fallback chain (Latin stays pixel-styled)
 

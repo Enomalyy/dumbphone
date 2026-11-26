@@ -68,7 +68,7 @@ static const menu_item_t cat_maps[] = {
 };
 
 static const menu_item_t cat_settings[] = {
-    { .label = "Menu Style",      .icon = I_GEAR,   .target = PAGE_SETTINGS },
+    { .label = "Display",         .icon = I_PALETTE,.target = PAGE_SETTINGS },
     { .label = "Call Preference", .icon = I_PHONE,  .target = PAGE_SETTINGS },
     { .label = "Speed Dials",     .icon = I_USER,   .target = PAGE_SETTINGS },
     { .label = "Held Presses",    .icon = I_BOLT,   .target = PAGE_SETTINGS },
@@ -77,7 +77,7 @@ static const menu_item_t cat_settings[] = {
 /* The settings row each SETTINGS-category item lands on, by name, so the
  * two lists may be reordered independently. One entry per cat_settings row. */
 static const setting_id_t cat_settings_rows[] = {
-    SETTING_MENU_STYLE,
+    SETTING_DISPLAY,
     SETTING_CALL_PREF,
     SETTING_SPEED_DIALS,
     SETTING_HELD_PRESS,

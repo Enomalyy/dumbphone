@@ -76,12 +76,126 @@ static const char *const g_role_name[UI_ROLE_COUNT] = {
 };
 
 /* ================================================================== */
+/* Font preferences — data only (the shell owns the LVGL font objects)  */
+/* ================================================================== */
+
+/* Asset files for the runtime faces. Pixelify Sans has a baked descriptor
+ * for its design size (16 px, font_pixelify.h) and an asset TTF for every
+ * other size, so the shipped look stays pixel-exact while the size is still
+ * adjustable. */
+static const char *const g_face_file[UI_FACE_COUNT] = {
+    [UI_FACE_VT323]      = "VT323-Regular.ttf",
+    [UI_FACE_SILKSCREEN] = "Silkscreen-Regular.ttf",
+    [UI_FACE_PIXELIFY]   = "PixelifySans-Regular.ttf",
+    [UI_FACE_JERSEY]     = "Jersey10-Regular.ttf",
+    [UI_FACE_DOTGOTHIC]  = "DotGothic16-ASCII.ttf",
+};
+
+static const char *const g_face_name[UI_FACE_COUNT] = {
+    [UI_FACE_VT323]      = "VT323",
+    [UI_FACE_SILKSCREEN] = "Silkscreen",
+    [UI_FACE_PIXELIFY]   = "Pixelify",
+    [UI_FACE_JERSEY]     = "Jersey 10",
+    [UI_FACE_DOTGOTHIC]  = "DotGothic16",
+};
+
+static const char *const g_face_short[UI_FACE_COUNT] = {
+    [UI_FACE_VT323]      = "VT323",
+    [UI_FACE_SILKSCREEN] = "SILK",
+    [UI_FACE_PIXELIFY]   = "PIXEL",
+    [UI_FACE_JERSEY]     = "JERSEY",
+    [UI_FACE_DOTGOTHIC]  = "GOTH",
+};
+
+static const char *const g_font_role_name[UI_FONT_ROLE_COUNT] = {
+    [UI_FONT_HEADER]  = "Headers",
+    [UI_FONT_TEXT]    = "Text",
+    [UI_FONT_SUBTEXT] = "Subtext",
+};
+
+/* The TEST LADDERS. Entry 0 is the shipped default (pixel-identical), and
+ * each press steps face AND size together so one CENTER is one visible
+ * change on the panel. §14.12's final picker splits the two; this is the
+ * mechanism under test, and every candidate face is reachable. */
+typedef struct { uint8_t face; uint8_t px; } font_step_t;
+
+static const font_step_t g_ladder[UI_FONT_ROLE_COUNT][6] = {
+    [UI_FONT_HEADER] = {
+        { UI_FACE_SILKSCREEN, 24 },   /* shipped                         */
+        { UI_FACE_SILKSCREEN, 32 },
+        { UI_FACE_VT323,      32 },
+        { UI_FACE_JERSEY,     32 },
+        { UI_FACE_DOTGOTHIC,  24 },
+        { UI_FACE_PIXELIFY,   32 },
+    },
+    [UI_FONT_TEXT] = {
+        { UI_FACE_VT323,      24 },   /* shipped                         */
+        { UI_FACE_VT323,      20 },
+        { UI_FACE_VT323,      28 },
+        { UI_FACE_JERSEY,     24 },
+        { UI_FACE_DOTGOTHIC,  24 },
+        { UI_FACE_SILKSCREEN, 24 },
+    },
+    [UI_FONT_SUBTEXT] = {
+        { UI_FACE_PIXELIFY,   16 },   /* shipped (baked 8bpp)            */
+        { UI_FACE_PIXELIFY,   20 },
+        { UI_FACE_VT323,      16 },
+        { UI_FACE_JERSEY,     16 },
+        { UI_FACE_DOTGOTHIC,  16 },
+        { UI_FACE_SILKSCREEN, 16 },
+    },
+};
+#define LADDER_N ((int)(sizeof g_ladder[0] / sizeof g_ladder[0][0]))
+
+/* ================================================================== */
 /* Live state                                                          */
 /* ================================================================== */
 
 static ui_theme_id_t g_theme = UI_THEME_DARK;
 static ui_palette_t  g_pal;
 static void        (*g_apply_cb)(void);
+static uint8_t       g_ladder_idx[UI_FONT_ROLE_COUNT] = { 0, 0, 0 };
+
+ui_font_pref_t ui_font_pref(ui_font_role_t role)
+{
+    ui_font_pref_t p = { UI_FACE_SILKSCREEN, UI_FONT_TITLE_PX };
+    if ((unsigned)role < UI_FONT_ROLE_COUNT) {
+        p.face = g_ladder[role][g_ladder_idx[role]].face;
+        p.px   = g_ladder[role][g_ladder_idx[role]].px;
+    }
+    return p;
+}
+
+void ui_font_pref_next(ui_font_role_t role)
+{
+    if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
+        return;
+    }
+    g_ladder_idx[role] = (uint8_t)((g_ladder_idx[role] + 1) % LADDER_N);
+    if (g_apply_cb) {
+        g_apply_cb();   /* re-resolve the faces, then restyle every page */
+    }
+}
+
+const char *ui_font_role_name(ui_font_role_t role)
+{
+    return (unsigned)role < UI_FONT_ROLE_COUNT ? g_font_role_name[role] : "?";
+}
+
+const char *ui_face_name(ui_face_t face)
+{
+    return (unsigned)face < UI_FACE_COUNT ? g_face_name[face] : "?";
+}
+
+const char *ui_face_short(ui_face_t face)
+{
+    return (unsigned)face < UI_FACE_COUNT ? g_face_short[face] : "?";
+}
+
+const char *ui_face_file(ui_face_t face)
+{
+    return (unsigned)face < UI_FACE_COUNT ? g_face_file[face] : NULL;
+}
 
 /* lv_color_hex() is not a compile-time constant, so the table is resolved
  * into the live palette once per switch. */
@@ -131,7 +245,14 @@ const char *ui_role_name(ui_role_t role)
     return (unsigned)role < UI_ROLE_COUNT ? g_role_name[role] : "?";
 }
 
-void ui_theme_on_apply(void (*cb)(void))
+void ui_appearance_on_apply(void (*cb)(void))
 {
     g_apply_cb = cb;
+}
+
+void ui_appearance_apply(void)
+{
+    if (g_apply_cb) {
+        g_apply_cb();
+    }
 }

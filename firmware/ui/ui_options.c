@@ -41,6 +41,17 @@ static const opt_entry_t opts_settings[] = {
     { "Held Presses", I_BOLT, OPT_ACTION_PAGE, PAGE_HELD_PRESS },
 };
 
+/* Display page: the three font roles are one level deeper; the settings
+ * tree and the main menu are one back. */
+static const opt_entry_t opts_display[] = {
+    { "Font Roles", I_TH,        OPT_ACTION_PAGE, PAGE_FONT },
+    { "Settings",   I_GEAR,      OPT_ACTION_PAGE, PAGE_SETTINGS },
+};
+static const opt_entry_t opts_font[] = {
+    { "Display",  I_TH,   OPT_ACTION_PAGE, PAGE_DISPLAY },
+    { "Settings", I_GEAR, OPT_ACTION_PAGE, PAGE_SETTINGS },
+};
+
 /* Config sub-pages: back to the settings tree they belong to. */
 static const opt_entry_t opts_speeddial[] = {
     { "Settings", I_GEAR, OPT_ACTION_PAGE, PAGE_SETTINGS },
@@ -72,6 +83,8 @@ const opt_entry_t *ui_options_for(ui_screen_id_t screen, int *n)
     case UI_SCREEN_CHATLIST:   *n = 3; return opts_messaging;
     case UI_SCREEN_MENU:       *n = 3; return opts_menu;
     case UI_SCREEN_SETTINGS:   *n = 2; return opts_settings;
+    case UI_SCREEN_DISPLAY:    *n = 2; return opts_display;
+    case UI_SCREEN_FONT:       *n = 2; return opts_font;
     case UI_SCREEN_SPEEDDIALS: *n = 1; return opts_speeddial;
     case UI_SCREEN_HELDPRESS:  *n = 1; return opts_heldpress;
     case UI_SCREEN_CALLHIST:   *n = 2; return opts_callhist;

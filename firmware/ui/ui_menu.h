@@ -51,6 +51,8 @@ typedef enum {
     PAGE_LINES,         /* Maps                                        */
     PAGE_STATIONS,      /* Maps                                        */
     PAGE_SETTINGS,      /* Settings tree                               */
+    PAGE_DISPLAY,       /* Settings > Display: theme, font, menu style */
+    PAGE_FONT,          /* Settings > Display > Font: 3 system faces   */
     PAGE_SPEED_DIALS,   /* Settings: speed-dial config sub-page        */
     PAGE_HELD_PRESS,    /* Settings: held-press key config sub-page    */
 } page_id_t;
@@ -59,6 +61,16 @@ typedef enum {
  * renderer draws them only when present, so a plain one-line item (the main
  * menu) and a two-line chat row (name + preview + time + unread) are the
  * same structure. */
+/* `font_role`: which of the three adjustable faces the row's label is drawn
+ * in. Only the Font page uses it, so each of its rows IS the level it names.
+ * Kept as bytes (not ui_font_role_t) so a ZERO-INITIALISED item means "page
+ * default" — TEXT — not "header": every item table in the app relies on
+ * that. The mapping to the appearance layer lives in ui_menu.c. */
+#define MENU_FONT_INHERIT 0
+#define MENU_FONT_HEADER  1
+#define MENU_FONT_TEXT    2
+#define MENU_FONT_SUBTEXT 3
+
 typedef struct {
     const char *label;   /* primary line ("Chats", a chat name)  */
     const char *sub;     /* optional second line (preview text) */
@@ -66,6 +78,7 @@ typedef struct {
     const char *meta;    /* optional right-aligned text (time)  */
     int         badge;   /* >0: unread count, drawn as [n]      */
     page_id_t   target;  /* where CENTER goes                   */
+    uint8_t     font_role; /* UI_FONT_* or MENU_FONT_INHERIT    */
 } menu_item_t;
 
 typedef struct {
@@ -139,6 +152,13 @@ void ui_list_select(list_page_t *p, int idx);
 void ui_list_refresh(list_page_t *p);
 
 /* The page id the selected item opens (PAGE_NONE if none). */
+/* Appearance apply pass: restyle every built list page (palette + faces).
+ * The shell calls it after a theme or font change. UI thread. */
+void ui_menu_restyle(void);
+
+/* Re-layout every built list page after the content height changed. */
+void ui_menu_relayout(void);
+
 page_id_t ui_list_selected_target(const list_page_t *p);
 
 /* Accessors. */

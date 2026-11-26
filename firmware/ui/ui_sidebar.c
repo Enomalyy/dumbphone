@@ -34,6 +34,7 @@
 #define OPT_MAX        UI_SIDEBAR_ROWS_MAX   /* more than any page's table */
 
 static lv_obj_t *scr_sidebar;
+static lv_obj_t *side_title;   /* the "OPTIONS" header label */
 static lv_obj_t *side_rows[OPT_MAX];
 static lv_obj_t *side_row_icon[OPT_MAX];
 static lv_obj_t *side_row_lbl[OPT_MAX];
@@ -120,7 +121,8 @@ void ui_sidebar_build(lv_obj_t *parent)
     lv_obj_set_style_radius(scr_sidebar, 0, 0);
     lv_obj_add_flag(scr_sidebar, LV_OBJ_FLAG_HIDDEN);
 
-    side_label(scr_sidebar, "OPTIONS", ui_font_chrome(), C_TEXT, 10, 8, 90);
+    side_title = side_label(scr_sidebar, "OPTIONS", ui_font_chrome(), C_TEXT,
+                            10, 8, 90);
 
     for (int i = 0; i < OPT_MAX; i++) {
         lv_obj_t *row = lv_obj_create(scr_sidebar);
@@ -140,6 +142,34 @@ void ui_sidebar_build(lv_obj_t *parent)
         lv_label_set_long_mode(side_row_lbl[i], LV_LABEL_LONG_MODE_DOTS);
 
         lv_obj_add_flag(row, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+/* Appearance apply pass: panel + every row re-wear the current palette. */
+void ui_sidebar_restyle(void)
+{
+    if (!scr_sidebar) {
+        return;
+    }
+    lv_obj_set_style_bg_color(scr_sidebar, C_GROUND, 0);
+    lv_obj_set_style_border_color(scr_sidebar, C_BORDER, 0);
+    if (side_title) {
+        lv_obj_set_style_text_color(side_title, C_TEXT, 0);
+    }
+    for (int i = 0; i < OPT_MAX; i++) {
+        if (!side_rows[i]) {
+            continue;
+        }
+        style_side_row(i);
+        lv_obj_set_style_text_font(side_row_lbl[i], ui_font_body_l(), 0);
+    }
+}
+
+/* Re-layout after the content area changed height. */
+void ui_sidebar_relayout(void)
+{
+    if (scr_sidebar) {
+        lv_obj_set_size(scr_sidebar, SIDEBAR_W, UI_CONTENT_H);
     }
 }
 

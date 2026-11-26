@@ -116,7 +116,8 @@ extern "C" {
 #define UI_HOME_WIDGET_GAP    5   /* between cards                     */
 #define UI_HOME_CARD_W ui_home_card_w()
 #define UI_HOME_MOTIF_Y     150   /* wallpaper phone glyph, centred    */
-#define UI_HOME_HINT_Y      372   /* key affordance line above the bar */
+#define UI_HOME_HINT_BOTTOM  46   /* key affordance line, from the bottom
+                                   * edge (identity at 320x480: 418-46) */
 
 /* ================================================================== */
 /* Design tokens — font sizes (pixels)                                 */
@@ -193,9 +194,65 @@ ui_theme_id_t ui_theme_get(void);
 const char *ui_theme_name(ui_theme_id_t id);
 const char *ui_role_name(ui_role_t role);
 
-/* Register the apply pass (the shell owns it: it knows every built page).
- * Called by ui_theme_set() after the palette resolves. */
-void ui_theme_on_apply(void (*cb)(void));
+/* Register the ONE apply pass (the shell owns it: it knows every built
+ * page). ui_theme_set() and ui_font_pref_next() both run it, so a colour or
+ * a face/size change reaches every built object through the same path. */
+void ui_appearance_on_apply(void (*cb)(void));
+
+/* Run the registered apply pass now (the shell uses it after its own
+ * appearance changes, e.g. re-laying out for the softkey bar). */
+void ui_appearance_apply(void);
+
+/* ================================================================== */
+/* Font preferences — three roles, face + size (spec §14.12)           */
+/* ================================================================== */
+
+/* The three levels of abstraction the UI actually has. They are the ONLY
+ * adjustable faces: the chrome face (status bar, soft keys) and the icon
+ * face stay fixed — chrome is furniture, not text. */
+typedef enum {
+    UI_FONT_HEADER = 0,   /* page + category titles        */
+    UI_FONT_TEXT,         /* primary list text, row labels */
+    UI_FONT_SUBTEXT,      /* previews, meta values, values */
+    UI_FONT_ROLE_COUNT
+} ui_font_role_t;
+
+/* Faces available to the three roles. All are OFL and load from the assets
+ * font directory at runtime (no baked tables except the pixel-perfect
+ * Pixelify 16 the UI was designed on — see font_pixelify.h). Removing a face
+ * is not a preference: §14.12 keeps every candidate available so the trade
+ * can be judged on the device. */
+typedef enum {
+    UI_FACE_VT323 = 0,
+    UI_FACE_SILKSCREEN,
+    UI_FACE_PIXELIFY,
+    UI_FACE_JERSEY,
+    UI_FACE_DOTGOTHIC,
+    UI_FACE_COUNT
+} ui_face_t;
+
+typedef struct {
+    uint8_t face;   /* ui_face_t */
+    uint8_t px;
+} ui_font_pref_t;
+
+/* Current preference of a role (data only; the shell resolves it to a font). */
+ui_font_pref_t ui_font_pref(ui_font_role_t role);
+
+/* Advance the role to the next entry of its test ladder (face + size
+ * together — the final picker will split the two; until then one CENTER is
+ * one visible step). Runs the apply pass, so the change is immediate. */
+void ui_font_pref_next(ui_font_role_t role);
+
+/* The LVGL face behind a role (defined in the shell, which owns the font
+ * objects). Renderers that draw text in a specific level call this. */
+lv_font_t *ui_font_of(ui_font_role_t role);
+
+/* Display strings: "Headers", "Text", "Subtext"; "VT323" / "SILK" / ... */
+const char *ui_font_role_name(ui_font_role_t role);
+const char *ui_face_name(ui_face_t face);    /* full name ("Silkscreen")  */
+const char *ui_face_short(ui_face_t face);   /* meta column ("SILK")      */
+const char *ui_face_file(ui_face_t face);    /* asset TTF, NULL = baked   */
 
 /* Font accessors — declared here (the appearance API) but defined in the
  * shell, which owns the LVGL font objects and their lifecycle. The renderer

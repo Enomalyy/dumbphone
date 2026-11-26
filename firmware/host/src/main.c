@@ -54,6 +54,7 @@
 #include "ui/ui_geometry.h"
 #include "ui/ui_settings.h"
 #include "ui/ui_shell.h"
+#include "ui/ui_theme.h"
 
 #include "hal_sdl_host.h"
 
@@ -261,6 +262,8 @@ int main(int argc, char **argv)
     int tap_x = 0, tap_y = 0;        /* a point touch (panel px)          */
     int hold_ms = 0;                /* how long --key presses stay down */
     const char *menu_style = NULL;   /* "carousel" | "grid"         */
+    const char *theme_name = NULL;    /* "dark" | "light"            */
+    const char *font_cycle = NULL;    /* "header|text|subtext[:N]"   */
     const char *geom = NULL;          /* "WxH" panel geometry          */
     /* Loopback by default: the viewport is a dev tool and should not be
      * reachable from other machines unless asked. To drive it from a phone
@@ -324,6 +327,10 @@ int main(int argc, char **argv)
             hold_ms = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--menu-style") && i + 1 < argc) {
             menu_style = argv[++i];
+        } else if (!strcmp(argv[i], "--theme") && i + 1 < argc) {
+            theme_name = argv[++i];
+        } else if (!strcmp(argv[i], "--font") && i + 1 < argc) {
+            font_cycle = argv[++i];
         } else if ((!strcmp(argv[i], "--geom") || !strcmp(argv[i], "--geometry"))
                    && i + 1 < argc) {
             geom = argv[++i];
@@ -401,6 +408,33 @@ int main(int argc, char **argv)
     if (menu_style) {
         ui_settings_set_menu_style(!strcmp(menu_style, "grid")
                                     ? MENU_STYLE_GRID : MENU_STYLE_CAROUSEL);
+    }
+
+    /* Deterministic appearance for shots: the theme is applied inside
+     * ui_shell_init() (before pages are built), and the font ladder is
+     * advanced here — also before the UI exists, so no restyle is needed. */
+    if (theme_name) {
+        ui_shell_set_startup_theme(!strcmp(theme_name, "light")
+                                    ? UI_THEME_LIGHT : UI_THEME_DARK);
+    }
+    if (font_cycle) {
+        int n = 1;
+        char name[16] = { 0 };
+        if (sscanf(font_cycle, "%15[^:]:%d", name, &n) < 1) {
+            fprintf(stderr, "[main] bad --font '%s'\n", font_cycle);
+            return 2;
+        }
+        ui_font_role_t role = !strcmp(name, "header") ? UI_FONT_HEADER
+                            : !strcmp(name, "text")   ? UI_FONT_TEXT
+                            : !strcmp(name, "subtext") ? UI_FONT_SUBTEXT
+                            : (ui_font_role_t)-1;
+        if ((int)role < 0) {
+            fprintf(stderr, "[main] --font wants header|text|subtext[:N]\n");
+            return 2;
+        }
+        for (int k = 0; k < n; k++) {
+            ui_font_pref_next(role);
+        }
     }
 
     /* Shot mode freezes the clock at its seed value: any run that injects

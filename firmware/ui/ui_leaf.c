@@ -57,11 +57,14 @@ static const keymap_t km_lock = {
 };
 
 static lv_obj_t *scr_lock;
+static lv_obj_t *lock_icon;        /* the dim lock glyph                 */
 static lv_obj_t *lock_clock_lbl;   /* the lock screen's large live clock */
 static lv_obj_t *lock_date_lbl;    /* the lock screen's date line        */
+static lv_obj_t *lock_hint_lbl;    /* "KEYPAD TO UNLOCK"                 */
 
 static lv_obj_t *scr_stub;
 static lv_obj_t *stub_title_lbl;
+static lv_obj_t *stub_sub_lbl;
 
 /* A one-line label, left-aligned at (x, y) with a fixed width. */
 static lv_obj_t *leaf_label(lv_obj_t *parent, const char *text,
@@ -103,10 +106,10 @@ void ui_leaf_build_lock(lv_obj_t *parent)
     style_content_screen(scr_lock);
     lv_obj_add_flag(scr_lock, LV_OBJ_FLAG_HIDDEN);
 
-    lv_obj_t *icon = leaf_label(scr_lock, I_LOCK, ui_font_icon(), C_ACCENT,
-                                0, 0, UI_PANEL_W);
-    lv_obj_set_style_text_align(icon, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(icon, LV_ALIGN_CENTER, 0, -104);
+    lock_icon = leaf_label(scr_lock, I_LOCK, ui_font_icon(), C_ACCENT,
+                           0, 0, UI_PANEL_W);
+    lv_obj_set_style_text_align(lock_icon, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(lock_icon, LV_ALIGN_CENTER, 0, -104);
 
     lock_clock_lbl = leaf_label(scr_lock, "", ui_font_title(), C_TEXT,
                                 0, 0, UI_PANEL_W);
@@ -118,14 +121,46 @@ void ui_leaf_build_lock(lv_obj_t *parent)
     lv_obj_set_style_text_align(lock_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(lock_date_lbl, LV_ALIGN_CENTER, 0, -4);
 
-    lv_obj_t *hint = leaf_label(scr_lock, "KEYPAD TO UNLOCK",
-                                ui_font_chrome_s(), C_TEXT_DIM,
-                                0, 0, UI_PANEL_W);
-    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(hint, LV_ALIGN_CENTER, 0, 52);
+    lock_hint_lbl = leaf_label(scr_lock, "KEYPAD TO UNLOCK",
+                               ui_font_chrome_s(), C_TEXT_DIM,
+                               0, 0, UI_PANEL_W);
+    lv_obj_set_style_text_align(lock_hint_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(lock_hint_lbl, LV_ALIGN_CENTER, 0, 52);
 
     lv_label_set_text(lock_clock_lbl, LEAF_CLOCK_SEED_TIME);
     lv_label_set_text(lock_date_lbl, LEAF_CLOCK_SEED_DATE);
+}
+
+/* Appearance apply pass: both leaf screens re-wear the palette + faces. */
+void ui_leaf_restyle(void)
+{
+    if (scr_lock) {
+        lv_obj_set_style_bg_color(scr_lock, C_GROUND, 0);
+        lv_obj_set_style_text_color(lock_icon, C_ACCENT, 0);
+        lv_obj_set_style_text_font(lock_clock_lbl, ui_font_title(), 0);
+        lv_obj_set_style_text_color(lock_clock_lbl, C_TEXT, 0);
+        lv_obj_set_style_text_font(lock_date_lbl, ui_font_body_l(), 0);
+        lv_obj_set_style_text_color(lock_date_lbl, C_ACCENT, 0);
+        lv_obj_set_style_text_color(lock_hint_lbl, C_TEXT_DIM, 0);
+    }
+    if (scr_stub) {
+        lv_obj_set_style_bg_color(scr_stub, C_GROUND, 0);
+        lv_obj_set_style_text_font(stub_title_lbl, ui_font_title(), 0);
+        lv_obj_set_style_text_color(stub_title_lbl, C_TEXT, 0);
+        lv_obj_set_style_text_font(stub_sub_lbl, ui_font_body_m(), 0);
+        lv_obj_set_style_text_color(stub_sub_lbl, C_TEXT_DIM, 0);
+    }
+}
+
+/* Re-layout after the content area changed height (softkey bar toggle). */
+void ui_leaf_relayout(void)
+{
+    if (scr_lock) {
+        lv_obj_set_size(scr_lock, UI_PANEL_W, UI_CONTENT_H);
+    }
+    if (scr_stub) {
+        lv_obj_set_size(scr_stub, UI_PANEL_W, UI_CONTENT_H);
+    }
 }
 
 lv_obj_t *ui_leaf_lock_root(void)
@@ -166,12 +201,12 @@ void ui_leaf_build_stub(lv_obj_t *parent)
     lv_obj_remove_flag(stub_title_lbl, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_align(stub_title_lbl, LV_ALIGN_CENTER, 0, -40);
 
-    lv_obj_t *sub = lv_label_create(scr_stub);
-    lv_label_set_text(sub, "coming soon");
-    lv_obj_set_style_text_font(sub, ui_font_body_m(), 0);
-    lv_obj_set_style_text_color(sub, C_TEXT_DIM, 0);
-    lv_obj_remove_flag(sub, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_align(sub, LV_ALIGN_CENTER, 0, 8);
+    stub_sub_lbl = lv_label_create(scr_stub);
+    lv_label_set_text(stub_sub_lbl, "coming soon");
+    lv_obj_set_style_text_font(stub_sub_lbl, ui_font_body_m(), 0);
+    lv_obj_set_style_text_color(stub_sub_lbl, C_TEXT_DIM, 0);
+    lv_obj_remove_flag(stub_sub_lbl, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_align(stub_sub_lbl, LV_ALIGN_CENTER, 0, 8);
 }
 
 lv_obj_t *ui_leaf_stub_root(void)

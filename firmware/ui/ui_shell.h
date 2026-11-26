@@ -33,6 +33,8 @@ typedef enum {
     UI_SCREEN_CHATLIST,      /* Messaging: WhatsApp-style chat list          */
     UI_SCREEN_MENU,          /* main-menu category carousel (concept gen-09/03) */
     UI_SCREEN_SETTINGS,      /* settings tree with working toggles              */
+    UI_SCREEN_DISPLAY,       /* Settings > Display: theme/font/menu/bar (spec §14) */
+    UI_SCREEN_FONT,          /* Settings > Display > Font: headers/text/subtext */
     UI_SCREEN_SPEEDDIALS,    /* speed-dial config sub-page (T9 1..9 names)       */
     UI_SCREEN_HELDPRESS,     /* held-press key config sub-page (spec §2)         */
     UI_SCREEN_CALLHIST,      /* Calls: recent calls list (spec §2)               */
@@ -44,6 +46,14 @@ typedef enum {
 /* Initialize LVGL, fonts, and both screens. Must run on the UI thread, after
  * hal_display_init(). Returns 0 on success. */
 int  ui_shell_init(void);
+
+/* Re-run the layout pass (content area + every built page). The softkey-bar
+ * toggle calls it after ui_geometry_set_softkeys(). UI thread. */
+void ui_shell_relayout(void);
+
+/* Start on a given theme (harness/shot mode). Call BEFORE ui_shell_init();
+ * the default is DARK, which is what every golden frame was shot with. */
+void ui_shell_set_startup_theme(int theme_id);
 
 /* Freeze the status-bar / lock clock at its seed value (20:36). Harness
  * only: keeps golden frames reproducible for runs longer than a second.

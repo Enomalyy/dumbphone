@@ -85,9 +85,9 @@ static uint8_t *draw_buf;
 
 static lv_font_t *f_chrome;    /* Silkscreen — status bar, soft keys     */
 static lv_font_t *f_chrome_s;  /* Silkscreen small — tabs                */
-static lv_font_t *f_title;     /* Silkscreen large — "MENU"              */
-static lv_font_t *f_body_l;    /* VT323 — primary list text              */
-static lv_font_t *f_body_m;    /* Pixelify Sans 16 — preview / secondary */
+static lv_font_t *f_title;     /* HEADER role  — titles                  */
+static lv_font_t *f_body_l;    /* TEXT role    — primary list text       */
+static lv_font_t *f_body_m;    /* SUBTEXT role — preview / secondary     */
 /* Mutable shallow copy of the const baked descriptor (font_pixelify.h):
  * only `fallback` is written on it; bitmap/dsc tables stay shared. */
 static lv_font_t body_m_copy;
@@ -100,6 +100,8 @@ static lv_font_t *f_icon_s;    /* Font Awesome solid, small (carets)     */
 #define CLOCK_SEED_DATE "Thu 26 Nov"
 
 static bool clock_frozen = false;   /* harness: never tick (see set_clock_freeze) */
+static ui_theme_id_t g_startup_theme = UI_THEME_DARK;  /* harness: --theme */
+static bool g_startup_theme_set = false;
 
 static lv_obj_t *scr_root;      /* the persistent root screen (the frame)  */
 static lv_obj_t *content_area;  /* swaps screens; the frame around it is fixed */
@@ -240,19 +242,25 @@ static lv_obj_t *make_label(lv_obj_t *parent, const char *text, lv_font_t *font,
 /* Status bar (pinned top)                                             */
 /* ------------------------------------------------------------------ */
 
+/* Every label the frame paints, so the appearance pass can restyle it. */
+#define SB_LABELS 5
+static lv_obj_t *sb_lbl[SB_LABELS];
+static int       sb_n;
+
 static void build_status_bar(lv_obj_t *parent)
 {
     /* Icons and text are separate labels: the icon font has no ASCII, the text
      * font has no Font Awesome glyphs. */
-    make_label(parent, I_SIGNAL, f_icon, C_TEXT, 6, 3, 18);
-    make_label(parent, "4G", f_chrome, C_TEXT, 26, 5, 30);
+    sb_lbl[sb_n++] = make_label(parent, I_SIGNAL, f_icon, C_TEXT, 6, 3, 18);
+    sb_lbl[sb_n++] = make_label(parent, "4G", f_chrome, C_TEXT, 26, 5, 30);
 
-    make_label(parent, I_BATTERY, f_icon, C_TEXT, 186, 4, 22);
+    sb_lbl[sb_n++] = make_label(parent, I_BATTERY, f_icon, C_TEXT, 186, 4, 22);
     /* One battery value, two readers: here and HOME's widget row. */
     static char batt[8];
     snprintf(batt, sizeof batt, "%d%%", ui_shell_battery_pct());
-    make_label(parent, batt, f_chrome, C_TEXT, 210, 5, 40);
+    sb_lbl[sb_n++] = make_label(parent, batt, f_chrome, C_TEXT, 210, 5, 40);
     lbl_clock = make_label(parent, CLOCK_SEED_TIME, f_chrome, C_TEXT, 254, 5, 60);
+    sb_lbl[sb_n++] = lbl_clock;
     lv_obj_set_style_text_align(lbl_clock, LV_TEXT_ALIGN_RIGHT, 0);
 }
 
@@ -290,6 +298,8 @@ static const keymap_t *page_keymap(void)
     switch (screen_stack[stack_top]) {
     case UI_SCREEN_MENU:       return ui_mainmenu_keymap();
     case UI_SCREEN_SETTINGS:   return &ui_settings_page()->keys;
+    case UI_SCREEN_DISPLAY:    return &ui_settings_display_page()->keys;
+    case UI_SCREEN_FONT:       return &ui_settings_font_page()->keys;
     case UI_SCREEN_SPEEDDIALS: return &ui_speeddial_page()->keys;
     case UI_SCREEN_HELDPRESS:  return &ui_heldpress_page()->keys;
     case UI_SCREEN_CALLHIST:   return &ui_calls_history_page()->keys;
@@ -383,6 +393,8 @@ static bool is_locked(void)
  * calls page). The shell only owns these pointers and the screen stack. */
 static list_page_t *g_menu = NULL;
 static list_page_t *g_settings = NULL;
+static list_page_t *g_display = NULL;
+static list_page_t *g_font = NULL;
 static list_page_t *g_speeddial = NULL;
 static list_page_t *g_heldpress = NULL;
 static list_page_t *g_callhist = NULL;
@@ -395,6 +407,7 @@ static void update_softkeys(const keymap_t *km);
 static void open_stub(page_id_t id);
 static void open_dial(int idx);
 static void open_page(page_id_t id);
+static void relayout_all(void);
 
 /* CENTER: page-dependent meaning. HOME -> MAIN MENU; MENU -> open item;
  * SETTINGS -> toggle the selected setting and redraw its value, or open the
@@ -422,6 +435,23 @@ static void activate(void)
         } else {
             open_page(t);   /* navigable row (a config sub-page) */
         }
+    } else if (screen_stack[stack_top] == UI_SCREEN_DISPLAY) {
+        page_id_t t = ui_list_selected_target(g_display);
+        if (t == PAGE_NONE) {
+            ui_setting_effect_t fx =
+                ui_settings_display_activate(ui_list_sel(g_display));
+            ui_list_refresh(g_display);
+            if (fx == UI_SETTING_EFFECT_MENU_STYLE) {
+                ui_mainmenu_sync_layout();   /* the menu view changed */
+            } else if (fx == UI_SETTING_EFFECT_SOFTKEYS) {
+                relayout_all();              /* content area changed  */
+            }
+        } else {
+            open_page(t);
+        }
+    } else if (screen_stack[stack_top] == UI_SCREEN_FONT) {
+        ui_settings_font_activate(ui_list_sel(g_font));
+        ui_list_refresh(g_font);
     } else if (screen_stack[stack_top] == UI_SCREEN_SPEEDDIALS) {
         ui_speeddial_cycle(ui_list_sel(g_speeddial));
         ui_list_refresh(g_speeddial);
@@ -439,6 +469,10 @@ static void move_selection(int step)
         ui_list_move_sel(g_menu, step);
     } else if (screen_stack[stack_top] == UI_SCREEN_SETTINGS) {
         ui_list_move_sel(g_settings, step);
+    } else if (screen_stack[stack_top] == UI_SCREEN_DISPLAY) {
+        ui_list_move_sel(g_display, step);
+    } else if (screen_stack[stack_top] == UI_SCREEN_FONT) {
+        ui_list_move_sel(g_font, step);
     } else if (screen_stack[stack_top] == UI_SCREEN_SPEEDDIALS) {
         ui_list_move_sel(g_speeddial, step);
     } else if (screen_stack[stack_top] == UI_SCREEN_HELDPRESS) {
@@ -524,6 +558,7 @@ static void on_softkey_tap(lv_event_t *e)
  * are set with lv_label_set_text_static, so updates never allocate. */
 static lv_obj_t *sk_cap[3];
 static lv_obj_t *sk_lbl[3];
+static lv_obj_t *sk_bar;
 
 static void update_softkeys(const keymap_t *km)
 {
@@ -543,6 +578,7 @@ static void update_softkeys(const keymap_t *km)
 static void build_softkey_bar(lv_obj_t *parent)
 {
     lv_obj_t *bar = lv_obj_create(parent);
+    sk_bar = bar;
     lv_obj_set_size(bar, PANEL_W, SOFTKEYS_H);
     lv_obj_set_pos(bar, 0, PANEL_H - SOFTKEYS_H);
     lv_obj_remove_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
@@ -589,6 +625,18 @@ static void build_softkey_bar(lv_obj_t *parent)
 static void build_settings_screen(void)
 {
     g_settings = ui_list_build(content_area, ui_settings_page());
+}
+
+/* Settings > Display — theme / font / menu style / softkey bar (spec §14). */
+static void build_display_screen(void)
+{
+    g_display = ui_list_build(content_area, ui_settings_display_page());
+}
+
+/* Settings > Display > Font — headers / text / subtext (spec §14.12). */
+static void build_font_screen(void)
+{
+    g_font = ui_list_build(content_area, ui_settings_font_page());
 }
 
 /* Speed-dial sub-page — a canonical list page over ui_speeddial's menu_t. */
@@ -651,6 +699,8 @@ static void open_page(page_id_t id)
     switch (id) {
     case PAGE_CHATLIST: push_screen(UI_SCREEN_CHATLIST); break;
     case PAGE_SETTINGS: push_screen(UI_SCREEN_SETTINGS); break;
+    case PAGE_DISPLAY:  push_screen(UI_SCREEN_DISPLAY);  break;
+    case PAGE_FONT:     push_screen(UI_SCREEN_FONT);     break;
     case PAGE_SPEED_DIALS:  push_screen(UI_SCREEN_SPEEDDIALS);  break;
     case PAGE_HELD_PRESS:   push_screen(UI_SCREEN_HELDPRESS);   break;
     case PAGE_CALL_HISTORY: push_screen(UI_SCREEN_CALLHIST);    break;
@@ -759,6 +809,12 @@ void ui_shell_show_screen(ui_screen_id_t id)
     if (g_settings) {
         lv_obj_add_flag(ui_list_root(g_settings), LV_OBJ_FLAG_HIDDEN);
     }
+    if (g_display) {
+        lv_obj_add_flag(ui_list_root(g_display), LV_OBJ_FLAG_HIDDEN);
+    }
+    if (g_font) {
+        lv_obj_add_flag(ui_list_root(g_font), LV_OBJ_FLAG_HIDDEN);
+    }
     if (g_speeddial) {
         lv_obj_add_flag(ui_list_root(g_speeddial), LV_OBJ_FLAG_HIDDEN);
     }
@@ -789,6 +845,16 @@ void ui_shell_show_screen(ui_screen_id_t id)
         break;
     case UI_SCREEN_SETTINGS:
         lv_obj_remove_flag(ui_list_root(g_settings), LV_OBJ_FLAG_HIDDEN);
+        break;
+    case UI_SCREEN_DISPLAY:
+        if (g_display) {
+            lv_obj_remove_flag(ui_list_root(g_display), LV_OBJ_FLAG_HIDDEN);
+        }
+        break;
+    case UI_SCREEN_FONT:
+        if (g_font) {
+            lv_obj_remove_flag(ui_list_root(g_font), LV_OBJ_FLAG_HIDDEN);
+        }
         break;
     case UI_SCREEN_SPEEDDIALS:
         lv_obj_remove_flag(ui_list_root(g_speeddial), LV_OBJ_FLAG_HIDDEN);
@@ -981,12 +1047,129 @@ static void chain_fallbacks(lv_font_t *base, const lv_font_t *builtin, int px)
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Appearance pass: fonts by role, then restyle every built object     */
+/* ------------------------------------------------------------------ */
+
+/* One font object per (face, size) actually asked for. tiny_ttf holds a
+ * glyph cache per object, so re-creating on every press would churn; the
+ * cache makes cycling back free. The pref ladders have 6 entries per role,
+ * three roles, five faces — a long test session converges well inside this
+ * bound, and the S3 build ships the default faces only until Settings moves
+ * them. */
+#define FONT_CACHE_MAX 24
+static struct {
+    lv_font_t *font;
+    uint8_t    face;
+    uint8_t    px;
+} g_font_cache[FONT_CACHE_MAX];
+static int g_font_cache_n = 0;
+
+static const lv_font_t *role_builtin(ui_font_role_t role)
+{
+    switch (role) {
+    case UI_FONT_HEADER:  return &lv_font_montserrat_20;
+    case UI_FONT_TEXT:    return &lv_font_montserrat_18;
+    case UI_FONT_SUBTEXT: return &lv_font_montserrat_14;
+    default:              return &lv_font_montserrat_14;
+    }
+}
+
+/* Resolve (face, px) to a chained, cached face. The baked Pixelify 16 is
+ * the shipped subtext face and must stay pixel-exact, so that one size uses
+ * the descriptor; every other size loads the static TTF. */
+static lv_font_t *role_face(ui_font_role_t role, uint8_t face, uint8_t px)
+{
+    for (int i = 0; i < g_font_cache_n; i++) {
+        if (g_font_cache[i].face == face && g_font_cache[i].px == px) {
+            return g_font_cache[i].font;
+        }
+    }
+
+    lv_font_t *f = NULL;
+    if (face == UI_FACE_PIXELIFY && px == UI_FONT_BODY_M_PX) {
+        f = &body_m_copy;   /* baked 8bpp descriptor, shared bitmaps */
+    } else {
+        const char *file = ui_face_file((ui_face_t)face);
+        if (file) {
+            f = load_font(file, px, role_builtin(role));
+        }
+    }
+    if (!f) {
+        return NULL;
+    }
+    if (f != &body_m_copy) {
+        chain_fallbacks(f, role_builtin(role), px);
+    }
+
+    if (g_font_cache_n < FONT_CACHE_MAX) {
+        g_font_cache[g_font_cache_n].font = f;
+        g_font_cache[g_font_cache_n].face = face;
+        g_font_cache[g_font_cache_n].px   = px;
+        g_font_cache_n++;
+    } else {
+        printf("ui_shell: font cache full (%d) — face %s %d px not cached\n",
+               FONT_CACHE_MAX, ui_face_short((ui_face_t)face), px);
+    }
+    return f;
+}
+
+/* Point the three role faces at the current preferences. Cheap when nothing
+ * changed: the cache answers immediately. */
+static void sync_role_fonts(void)
+{
+    static uint8_t have_face[UI_FONT_ROLE_COUNT] = { 0xFF, 0xFF, 0xFF };
+    static uint8_t have_px[UI_FONT_ROLE_COUNT] = { 0, 0, 0 };
+
+    for (int r = 0; r < UI_FONT_ROLE_COUNT; r++) {
+        ui_font_pref_t p = ui_font_pref((ui_font_role_t)r);
+        if (have_face[r] == p.face && have_px[r] == p.px) {
+            continue;   /* already resolved */
+        }
+        lv_font_t *f = role_face((ui_font_role_t)r, p.face, p.px);
+        if (!f) {
+            printf("ui_shell: face %s %d px unavailable — keeping the old "
+                   "face for role %s\n", ui_face_short((ui_face_t)p.face),
+                   p.px, ui_font_role_name((ui_font_role_t)r));
+            continue;
+        }
+        have_face[r] = p.face;
+        have_px[r]   = p.px;
+    }
+    f_title  = role_face(UI_FONT_HEADER,  ui_font_pref(UI_FONT_HEADER).face,
+                         ui_font_pref(UI_FONT_HEADER).px);
+    f_body_l = role_face(UI_FONT_TEXT,    ui_font_pref(UI_FONT_TEXT).face,
+                         ui_font_pref(UI_FONT_TEXT).px);
+    f_body_m = role_face(UI_FONT_SUBTEXT, ui_font_pref(UI_FONT_SUBTEXT).face,
+                         ui_font_pref(UI_FONT_SUBTEXT).px);
+    if (!f_title)  { f_title  = (lv_font_t *)role_builtin(UI_FONT_HEADER); }
+    if (!f_body_l) { f_body_l = (lv_font_t *)role_builtin(UI_FONT_TEXT); }
+    if (!f_body_m) { f_body_m = (lv_font_t *)role_builtin(UI_FONT_SUBTEXT); }
+}
+
+/* THE apply pass (ui_theme.h): resolve the role faces, then make every built
+ * object wear the current palette + faces. Called by ui_theme_set() and
+ * ui_font_pref_next(), so a theme change and a font change take the same
+ * road. Everything here is UI-thread only, like every style call. */
+static void appearance_apply(void);
+
 /* Appearance API (declared in ui_theme.h): the shell owns the font objects. */
 lv_font_t *ui_font_chrome(void)   { return f_chrome; }
 lv_font_t *ui_font_chrome_s(void) { return f_chrome_s; }
 lv_font_t *ui_font_title(void)    { return f_title; }
 lv_font_t *ui_font_body_l(void)   { return f_body_l; }
 lv_font_t *ui_font_body_m(void)   { return f_body_m; }
+
+/* Role -> face, for renderers that preview a level (the Font page rows). */
+lv_font_t *ui_font_of(ui_font_role_t role)
+{
+    switch (role) {
+    case UI_FONT_HEADER:  return f_title;
+    case UI_FONT_SUBTEXT: return f_body_m;
+    case UI_FONT_TEXT:
+    default:              return f_body_l;
+    }
+}
 lv_font_t *ui_font_icon(void)     { return f_icon; }
 lv_font_t *ui_font_icon_s(void)   { return f_icon_s; }
 
@@ -1034,31 +1217,40 @@ int ui_shell_init(void)
      * are design tokens in ui_theme.h: changing one there resizes that face
      * everywhere ("make all fonts bigger" = one edit). */
     ui_theme_init();
+    if (g_startup_theme_set) {
+        ui_theme_set(g_startup_theme);
+    }
+
+    /* Chrome + icons are FIXED faces (furniture, not text): they are not in
+     * the three adjustable roles. */
     f_chrome   = load_font("Silkscreen-Regular.ttf", UI_FONT_CHROME_PX, &lv_font_montserrat_14);
     f_chrome_s = load_font("Silkscreen-Regular.ttf", UI_FONT_CHROME_S_PX, &lv_font_montserrat_12);
-    f_title    = load_font("Silkscreen-Regular.ttf", UI_FONT_TITLE_PX, &lv_font_montserrat_20);
-    /* Large body face: VT323 as a TTF (Eliyahu's call, 26/11 — the big
-     * letters read better in it than in Pixelify). Small body face is
-     * baked 8-bit Pixelify Sans (font_pixelify.h): always present, no TTF
-     * load. Its descriptor is const rodata, so chain_fallbacks() gets a
-     * mutable shallow copy — only the `fallback` pointer is ever written;
-     * bitmaps stay shared. */
-    f_body_l   = load_font("VT323-Regular.ttf", UI_FONT_BODY_L_PX, &lv_font_montserrat_18);
-    body_m_copy = lv_font_pixelify_m;
-    f_body_m   = &body_m_copy;
     f_icon     = load_font("FA-Solid.ttf", UI_FONT_ICON_PX, &lv_font_montserrat_16);
     f_icon_s   = load_font("FA-Solid.ttf", UI_FONT_ICON_S_PX, &lv_font_montserrat_12);
 
+    /* The three adjustable roles (HEADER / TEXT / SUBTEXT) come from the
+     * font preferences. Their shipped defaults — Silkscreen 24, VT323 24,
+     * baked Pixelify 16 — are the faces every golden frame was shot with.
+     * The baked Pixelify descriptor is const rodata, so chain_fallbacks()
+     * gets a mutable shallow copy: only `fallback` is ever written, the
+     * bitmaps stay shared. */
+    body_m_copy = lv_font_pixelify_m;
+    /* The baked descriptor gets its data-script chain once here; role_face()
+     * hands the same copy back for "Pixelify 16" and never re-chains it. */
+    chain_fallbacks(&body_m_copy, &lv_font_montserrat_14, UI_FONT_BODY_M_PX);
+    sync_role_fonts();
+
     /* Hebrew/emoji fall behind every face. ui_text_set() picks each data
      * string's base direction; the chain decides which face supplies a
-     * glyph the primary pixel face does not have. */
+     * glyph the primary pixel face does not have. (The three role faces got
+     * their chain inside role_face().) */
     chain_fallbacks(f_chrome,   &lv_font_montserrat_14, UI_FONT_CHROME_PX);
     chain_fallbacks(f_chrome_s, &lv_font_montserrat_12, UI_FONT_CHROME_S_PX);
-    chain_fallbacks(f_title,    &lv_font_montserrat_20, UI_FONT_TITLE_PX);
-    chain_fallbacks(f_body_l,   &lv_font_montserrat_18, UI_FONT_BODY_L_PX);
-    chain_fallbacks(f_body_m,   &lv_font_montserrat_14, UI_FONT_BODY_M_PX);
     chain_fallbacks(f_icon,     &lv_font_montserrat_16, UI_FONT_ICON_PX);
     chain_fallbacks(f_icon_s,   &lv_font_montserrat_12, UI_FONT_ICON_S_PX);
+
+    /* Every colour/font change from here on goes through this one pass. */
+    ui_appearance_on_apply(appearance_apply);
 
     /* The stable frame: pinned chrome + a content area that swaps screens. */
     lv_obj_t *root = lv_scr_act();
@@ -1084,6 +1276,8 @@ int ui_shell_init(void)
     g_menu = ui_mainmenu_build(content_area);   /* main menu (ui_mainmenu.c) */
     scr_menu = ui_list_root(g_menu);   /* the renderer's root object */
     build_settings_screen();
+    build_display_screen();
+    build_font_screen();
     build_speeddial_screen();
     build_heldpress_screen();
     build_callhist_screen();
@@ -1094,8 +1288,8 @@ int ui_shell_init(void)
     /* The renderer's page pool is a compile-time size: a page that failed to
      * build must be reported here, not crash the first time it is shown. */
     if (!ui_home_root() || !ui_messaging_page() || !g_menu ||
-        !g_settings || !g_speeddial || !g_heldpress || !g_callhist ||
-        !g_contacts) {
+        !g_settings || !g_display || !g_font || !g_speeddial ||
+        !g_heldpress || !g_callhist || !g_contacts) {
         printf("ui_shell: page pool exhausted — raise LIST_POOL in ui_menu.c\n");
         return -1;
     }
@@ -1110,6 +1304,83 @@ int ui_shell_init(void)
 
     ui_shell_show_screen(UI_SCREEN_HOME);
     return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Appearance + layout passes (the shell owns both)                    */
+/* ------------------------------------------------------------------ */
+
+/* The frame around the content: root, status bar, soft-key bar. */
+static void restyle_frame(void)
+{
+    lv_obj_set_style_bg_color(scr_root, C_GROUND, 0);
+    lv_obj_set_style_bg_color(content_area, C_GROUND, 0);
+    for (int i = 0; i < sb_n; i++) {
+        lv_obj_set_style_text_color(sb_lbl[i], C_TEXT, 0);
+    }
+    if (sk_bar) {
+        lv_obj_set_style_bg_color(sk_bar, C_GROUND, 0);
+        for (int i = 0; i < 3; i++) {
+            if (!sk_cap[i]) {
+                continue;
+            }
+            lv_obj_set_style_bg_color(sk_cap[i], C_GROUND, 0);
+            lv_obj_set_style_border_color(sk_cap[i], C_BORDER, 0);
+            lv_obj_set_style_text_color(sk_lbl[i], C_TEXT, 0);
+        }
+    }
+}
+
+/* ui_theme.h: the ONE apply pass. Resolve the role faces first (a font
+ * change needs the new pointers before anything draws), then re-wear the
+ * palette + faces: frame, every built list page, the sidebar, HOME and both
+ * leaf screens. No page tree is rebuilt and the nav stack is untouched. */
+static void appearance_apply(void)
+{
+    sync_role_fonts();
+    restyle_frame();
+    ui_menu_restyle();
+    ui_sidebar_restyle();
+    ui_home_restyle();
+    ui_leaf_restyle();
+}
+
+/* Soft-key bar shown/hidden (spec §14.9): the content area takes the bar's
+ * height, then every screen is resized for the new height. */
+static void relayout_all(void)
+{
+    int bar_h = ui_softkey_h();
+
+    lv_obj_set_size(content_area, PANEL_W, CONTENT_H);
+    if (sk_bar) {
+        if (bar_h > 0) {
+            lv_obj_set_size(sk_bar, PANEL_W, bar_h);
+            lv_obj_set_pos(sk_bar, 0, PANEL_H - bar_h);
+            lv_obj_remove_flag(sk_bar, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(sk_bar, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    ui_menu_relayout();
+    ui_home_relayout();
+    ui_leaf_relayout();
+    ui_sidebar_relayout();
+}
+
+void ui_shell_relayout(void)
+{
+    relayout_all();
+}
+
+void ui_shell_set_startup_theme(int theme_id)
+{
+    /* Recorded now, applied in ui_shell_init() right after ui_theme_init(),
+     * i.e. before any page is built: a startup theme needs no restyle pass
+     * and cannot race the UI thread. */
+    if (theme_id >= 0 && theme_id < UI_THEME_COUNT) {
+        g_startup_theme = (ui_theme_id_t)theme_id;
+        g_startup_theme_set = true;
+    }
 }
 
 void ui_shell_set_clock_freeze(bool frozen)

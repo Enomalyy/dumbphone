@@ -24,6 +24,13 @@ extern "C" {
 /* LOCKED (spec §1) — built under `parent` (the content area), hidden. */
 void ui_leaf_build_lock(lv_obj_t *parent);
 
+/* Appearance apply pass: re-wear the palette + faces on both leaf screens.
+ * UI thread. */
+void ui_leaf_restyle(void);
+
+/* Re-layout after the content area changed height (softkey bar toggle). */
+void ui_leaf_relayout(void);
+
 /* The lock screen's root object (the shell shows/hides it). */
 lv_obj_t *ui_leaf_lock_root(void);
 

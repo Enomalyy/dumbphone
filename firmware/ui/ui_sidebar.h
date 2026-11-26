@@ -59,6 +59,12 @@ const keymap_t *ui_sidebar_keymap(void);
  * a drag that started on a row does not execute it. */
 void ui_sidebar_set_activate_cb(void (*cb)(int idx));
 
+/* Appearance apply pass: re-wear the current palette + faces. UI thread. */
+void ui_sidebar_restyle(void);
+
+/* Re-layout after the content area changed height. */
+void ui_sidebar_relayout(void);
+
 #ifdef __cplusplus
 }
 #endif

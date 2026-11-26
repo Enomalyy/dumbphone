@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +30,13 @@ void ui_geometry_set(int w, int h);
 /* Current panel size (device pixels). */
 int ui_geom_w(void);
 int ui_geom_h(void);
+
+/* Show or hide the soft-key action bar. Hiding it gives its height back to
+ * the content area (spec §14.9): every page then re-lays out through the
+ * shell's relayout pass. Takes effect at the next relayout; the default is
+ * SHOWN and the identity geometry is unchanged either way. */
+void ui_geometry_set_softkeys(bool shown);
+bool ui_geom_softkeys(void);
 
 /* Derived layout metrics — computed from the panel size above: */
 int ui_status_h(void);    /* pinned status bar height (top)          */

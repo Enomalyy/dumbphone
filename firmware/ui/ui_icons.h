@@ -28,3 +28,10 @@
 #define I_HEART      u8"\uF004"   /* heart (FAVORITES)    */
 #define I_TH         u8"\uF00A"   /* th-large (grid view) */
 #define I_LOCK       u8"\uF023"   /* lock (lock screen)   */
+/* Appearance rows (Settings > Display / Font). Named here like every other
+ * glyph so a page never carries a bare codepoint. */
+#define I_PALETTE    u8"\uF53F"   /* palette (appearance) */
+#define I_ADJUST     u8"\uF042"   /* circle-half-stroke (dark/light) */
+#define I_FONT       u8"\uF031"   /* font                 */
+#define I_HEADING    u8"\uF1DC"   /* heading              */
+#define I_PARAGRAPH  u8"\uF1DD"   /* paragraph            */

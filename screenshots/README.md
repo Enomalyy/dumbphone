@@ -10,7 +10,12 @@ Two forms:
   and `just shot-window <screen> [press]`. These write the PNG straight into this folder.
 - **binary** — `./build-host/dumbphone-desktop --shot /tmp/x.ppm <flags> --no-server`
   followed by `magick /tmp/x.ppm <frame>.png`. Needed for the states the justfile has no
-  argument for (`--key`, `--swipe`, `--tap`).
+  argument for (`--key`, `--swipe`, `--tap`, `--theme`, `--font`).
+
+Appearance states: `--theme dark|light` starts on that palette (applied before any page is
+built, so the frame is the theme's own, not a restyle of the other one), and
+`--font header|text|subtext[:N]` steps that role's face+size ladder N times. Both are
+harness flags — `ui_theme_set()` from Settings is the real path and it repaints the live UI.
 
 Panel frames (`shot-desktop`, 320×480 device pixels — these are the golden diffs):
 
@@ -35,6 +40,10 @@ Panel frames (`shot-desktop`, 320×480 device pixels — these are the golden di
 | `tap-row3` | `--screen chat --tap 160 217` |
 | `key-down` | `--screen chat --key down` |
 | `options-home` / `options-menu` / `options-callhist` | `--screen <name> --key shoulder-l` (`home` is the real HOME screen, not the chat list) |
+| `settings-display` | `--screen settings --key ok` (Settings > Display: theme, font, menu style, softkey bar) |
+| `settings-font` | `--screen settings --key ok --key down --key ok` (each row previews its own level) |
+| `settings-font-header32` | ... `--font header:1` (Headers ladder stepped to Silkscreen 32) |
+| `chat-light` / `menu-light` / `settings-light` | the same screens with `--theme light` (palette B) |
 | `options-exec` | `--screen chat --key shoulder-l --key ok` |
 | `options-grid` | `--screen menu --key shoulder-l --key down --key ok` |
 | `browser-viewport` | a live capture of `just run-desktop`'s web viewport — not reproducible |

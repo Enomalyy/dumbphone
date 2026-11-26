@@ -71,7 +71,7 @@
  * sub-page, call history, contacts. Pages are built once at startup and live
  * for the process's lifetime, so this is the whole app's page budget: adding
  * a page means raising this number AND building it in ui_shell_init(). */
-#define LIST_POOL 7
+#define LIST_POOL 9
 
 struct ui_list_page {
     menu_t   *m;
@@ -142,6 +142,18 @@ static lv_obj_t *mk_data_line_label(lv_obj_t *parent, const char *text,
      * with RIGHT below.) */
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
     return lbl;
+}
+
+/* The face a row's label is drawn in: its own level when it names one (the
+ * Font page), otherwise the page default, TEXT. */
+static lv_font_t *item_label_font(uint8_t role)
+{
+    switch (role) {
+    case MENU_FONT_HEADER:  return ui_font_of(UI_FONT_HEADER);
+    case MENU_FONT_SUBTEXT: return ui_font_of(UI_FONT_SUBTEXT);
+    case MENU_FONT_TEXT:    return ui_font_of(UI_FONT_TEXT);
+    default:                return ui_font_body_l();
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -376,13 +388,25 @@ static void rebuild_rows(list_page_t *p)
                                        8, 1, 22);
             p->row_icon[i]  = mk_label(row, it->icon, ui_font_icon(), C_TEXT,
                                        32, 6, 26);
-            /* The name column ends just before whatever the row actually
-             * draws to its right — measured per row (label_width), so a
-             * row with a short value does not truncate the label. Long
-             * names still truncate with dots, never overlap. */
-            p->row_lbl[i]   = mk_data_line_label(row, it->label, ui_font_body_l(),
+            /* A row draws its label in its own role face when it names one
+             * (the Font page: each row IS the level it sets), otherwise in
+             * the page default (TEXT). The label box spans the row height so
+             * a larger HEADER preview is not clipped; the text still sits at
+             * the same y, and DOTS still keeps it to one line. */
+            lv_font_t *lbl_font = item_label_font(it->font_role);
+            /* One line, tall enough for the face in use: a bigger TEXT or a
+             * HEADER-sized preview must not be clipped by the box, and the
+             * shipped VT323 24 works out to the original 26 px. */
+            int lbl_h = (int)lv_font_get_line_height(lbl_font) + 2;
+            if (lbl_h < 26) {
+                lbl_h = 26;
+            }
+            if (lbl_h > h - 2) {
+                lbl_h = h - 2;
+            }
+            p->row_lbl[i]   = mk_data_line_label(row, it->label, lbl_font,
                                                  C_TEXT, LABEL_X, 1,
-                                                 label_width(it, w), 26);
+                                                 label_width(it, w), lbl_h);
 
             /* Optional row extras: second line, right-aligned meta (time),
              * unread badge. Coords match the chat-row layout (gen-08). */
@@ -583,6 +607,57 @@ void ui_list_select(list_page_t *p, int idx)
     style_row(p, old_sel);
     style_row(p, m->sel);
     ensure_visible(p);
+}
+
+/* Re-apply palette + faces to every built page. The row objects are rebuilt
+ * (rebuild_rows recreates them from the current menu_t), so they pick up new
+ * colours AND a new font size for free; the page furniture is restyled here.
+ * This is the renderer's half of the appearance apply pass. */
+void ui_menu_restyle(void)
+{
+    for (int i = 0; i < g_pool_n; i++) {
+        list_page_t *p = &g_pool[i];
+        if (!p->root) {
+            continue;
+        }
+        lv_obj_set_style_bg_color(p->root, C_GROUND, 0);
+        if (p->title_lbl) {
+            lv_obj_set_style_text_color(p->title_lbl, C_TEXT, 0);
+        }
+        if (p->chev_l) {
+            lv_obj_set_style_text_color(p->chev_l, C_ACCENT, 0);
+        }
+        if (p->chev_r) {
+            lv_obj_set_style_text_color(p->chev_r, C_ACCENT, 0);
+        }
+        for (int c = 0; c < p->m->n_cats; c++) {
+            if (!p->cells[c]) {
+                continue;
+            }
+            lv_obj_set_style_bg_color(p->cells[c], C_GROUND, 0);
+            style_cell(p, c);
+        }
+        rebuild_rows(p);
+    }
+}
+
+/* Re-layout every built page after the content area changed height (the
+ * softkey bar toggle). Row offsets are relative to the rows box, so resizing
+ * the box is the whole job; the page furniture is top-anchored. */
+void ui_menu_relayout(void)
+{
+    for (int i = 0; i < g_pool_n; i++) {
+        list_page_t *p = &g_pool[i];
+        if (!p->root) {
+            continue;
+        }
+        lv_obj_set_size(p->root, PANEL_W, CONTENT_H);
+        if (p->rows_box) {
+            int y0 = p->m->cats ? ROWS_Y : ROWS_Y_NC;
+            lv_obj_set_pos(p->rows_box, 0, y0);
+            lv_obj_set_size(p->rows_box, PANEL_W, CONTENT_H - y0);
+        }
+    }
 }
 
 void ui_list_refresh(list_page_t *p)

@@ -28,6 +28,12 @@ lv_obj_t *ui_home_root(void);
 /* The contextual keymap for this screen. */
 const keymap_t *ui_home_keymap(void);
 
+/* Appearance apply pass: re-wear the current palette + faces. UI thread. */
+void ui_home_restyle(void);
+
+/* Re-layout after the content area changed height (softkey bar toggle). */
+void ui_home_relayout(void);
+
 /* Update the DATE widget (the shell's clock tick feeds it; same format as
  * the status bar / lock screen date). */
 void ui_home_set_date(const char *date);
