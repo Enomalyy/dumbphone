@@ -180,9 +180,11 @@ change it from a phone or tablet, run the harness picker:
 python3 tools/geom-picker.py          # http://<this machine>:8096/
 ```
 
-It lists the presets and a free-form field; tapping one restarts the simulator at that size and
-sends you back to the viewport (which stays on `:8099`). It only drives `build-host/dumbphone-desktop`,
-so it is a harness tool — not part of the firmware and not shipped to the device.
+One page: the live viewport on top, the sizes underneath. Tapping one restarts the simulator at
+that size and the page reconnects itself; free-form works too. It drives
+`build-host/dumbphone-desktop` headlessly (`SDL_VIDEODRIVER=dummy`, so there is no window to close by
+accident — set `DUMBPHONE_VIEWPORT_WINDOW=1` to see one), so it is a harness tool: not firmware, and
+not shipped to the device.
 
 ## Status
 
