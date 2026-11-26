@@ -663,7 +663,7 @@ it: after §14 there will be far more layout code to unpick.
 
 ## 16. Structural work — folded from the outside review (26/11)
 
-`reorg-plan.md` was an outside proposal that sat *beside* the roadmap and did not count as plan.
+`reports/reorg-plan.md` was an outside proposal that sat *beside* the roadmap and did not count as plan.
 Eli's call (26/11 20:47): **it is part of the plan now, element by element.** This section is the
 design of those elements; `ROADMAP.md` holds their place in the order. Where the review said
 "proposed", read "planned". The parts it got wrong or that Stage 0 has overtaken are stated here,

@@ -69,7 +69,7 @@ backbone (a WhatsApp bridge over Wi-Fi) and the S3 HAL backends are next.
 
 Design docs: [`docs/ui-architecture.md`](docs/ui-architecture.md) ·
 [`docs/firmware-architecture.md`](docs/firmware-architecture.md) ·
-[`docs/audit-report-2026-11-26.md`](docs/audit-report-2026-11-26.md)
+[`docs/ROADMAP.md`](docs/ROADMAP.md)
 
 ## Licence
 
