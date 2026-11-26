@@ -103,9 +103,11 @@ static lv_obj_t *content_area;  /* swaps screens; the frame around it is fixed *
 static lv_obj_t *scr_menu;
 static lv_obj_t *lbl_clock;
 
-/* Screen stack (depth 4 is plenty for a skeleton). HOME is the base: END
- * returns here from anywhere, and a second END on it locks. */
-static ui_screen_id_t screen_stack[4] = { UI_SCREEN_HOME };
+/* Screen stack. HOME is the base: END returns here from anywhere, and a
+ * second END on it locks. The deepest real path today is HOME > MENU >
+ * SETTINGS > sub-page (4); push_screen() keeps the stack honest past that. */
+#define SCREEN_STACK_MAX 8
+static ui_screen_id_t screen_stack[SCREEN_STACK_MAX] = { UI_SCREEN_HOME };
 static int stack_top = 0;
 
 /* Lock state machine (spec §1): a first END on HOME arms the lock, a
@@ -316,13 +318,32 @@ static void go_back(void)
     }
 }
 
-/* Push a page onto the stack and show it. */
+/* Push a page onto the stack and show it.
+ *
+ * Invariant: the screen on display is always screen_stack[stack_top]. Key
+ * routing reads the top of the stack, so the two must never disagree.
+ *   - A page that is already on the stack is popped back to instead of
+ *     stacked twice ("Settings" from a settings sub-page returns to the
+ *     settings tree).
+ *   - A full stack replaces its top entry and says so, rather than showing a
+ *     screen the stack does not record. */
 static void push_screen(ui_screen_id_t id)
 {
     end_armed = false;
-    int top = (int)(sizeof screen_stack / sizeof screen_stack[0]) - 1;
-    if (stack_top < top) {
-        stack_top++;
+    int found = -1;
+    for (int i = 0; i <= stack_top; i++) {
+        if (screen_stack[i] == id) {
+            found = i;
+            break;
+        }
+    }
+    if (found >= 0) {
+        stack_top = found;
+    } else if (stack_top < SCREEN_STACK_MAX - 1) {
+        screen_stack[++stack_top] = id;
+    } else {
+        printf("ui_shell: screen stack full (%d), replacing its top\n",
+               SCREEN_STACK_MAX);
         screen_stack[stack_top] = id;
     }
     ui_shell_show_screen(id);
@@ -382,7 +403,14 @@ static void activate(void)
     if (screen_stack[stack_top] == UI_SCREEN_HOME) {
         push_screen(UI_SCREEN_MENU);
     } else if (screen_stack[stack_top] == UI_SCREEN_MENU) {
-        open_page(ui_list_selected_target(g_menu));
+        /* A SETTINGS-category item names the settings row it stands for;
+         * land on that row (read before open_page() changes screens). */
+        int row = ui_mainmenu_selected_setting();
+        page_id_t t = ui_list_selected_target(g_menu);
+        open_page(t);
+        if (t == PAGE_SETTINGS && row >= 0) {
+            ui_list_select(g_settings, row);
+        }
     } else if (screen_stack[stack_top] == UI_SCREEN_SETTINGS) {
         page_id_t t = ui_list_selected_target(g_settings);
         if (t == PAGE_NONE) {
@@ -610,19 +638,16 @@ void ui_shell_show_stub(page_id_t id)
     open_stub(id);
 }
 
-/* CENTER on a main-menu item: Chats -> the chat list; Settings -> the
- * settings tree (landing on the row the menu item asked for — the rows are
- * in the same order as the SETTINGS category items); Calls pages -> their
- * real list pages (spec §2); everything else -> a stub page (real content
- * arrives in a later leg). */
+/* Open the page a target names: Chats -> the chat list; Settings -> the
+ * settings tree; Calls pages -> their real list pages (spec §2); everything
+ * else -> a stub page. Which settings row to land on is the caller's
+ * business (see activate()), not a side effect of whatever the main menu
+ * happens to have selected. */
 static void open_page(page_id_t id)
 {
     switch (id) {
     case PAGE_CHATLIST: push_screen(UI_SCREEN_CHATLIST); break;
-    case PAGE_SETTINGS:
-        push_screen(UI_SCREEN_SETTINGS);
-        ui_list_select(g_settings, ui_list_sel(g_menu));
-        break;
+    case PAGE_SETTINGS: push_screen(UI_SCREEN_SETTINGS); break;
     case PAGE_SPEED_DIALS:  push_screen(UI_SCREEN_SPEEDDIALS);  break;
     case PAGE_HELD_PRESS:   push_screen(UI_SCREEN_HELDPRESS);   break;
     case PAGE_CALL_HISTORY: push_screen(UI_SCREEN_CALLHIST);    break;

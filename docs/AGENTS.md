@@ -97,6 +97,11 @@ The plan lives in **three places, and they must agree**:
 3. **GitHub issues** — the live status: `https://github.com/Enomalyy/dumbphone/issues`. One issue per
    stage, labelled `stage-0` … `stage-d`.
 
+Not one of the three: **`reorg-plan.md`** is an outside structural proposal (steps R1–R5 placed
+around the stages: golden-check CI, a port seam inside Stage 0, a page registry, a model layer, the
+UI in the S3 build). It is not the plan until a step has an issue. Read it before reworking the
+screen stack, page routing or the build, so the same ground isn't redone two ways.
+
 **Conventions:**
 - Start from an issue, not from a chat message. Read the issue and its spec section, then work.
 - New work that isn't in the roadmap gets an issue first (or it will be forgotten the moment the

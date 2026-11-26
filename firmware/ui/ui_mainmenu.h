@@ -34,6 +34,10 @@ const keymap_t *ui_mainmenu_keymap(void);
  * list and refresh (the same mechanism a swipe uses). */
 void ui_mainmenu_cycle_cat(int dir);
 
+/* The settings row (a setting_id_t) the selected item stands for, or -1
+ * when the menu is not on its SETTINGS category. */
+int ui_mainmenu_selected_setting(void);
+
 /* Re-apply the settings' menu style to the main menu. The toggle lives on
  * the Settings page, so the layout is synced each time the menu is shown
  * or an option changes it (spec §2). */

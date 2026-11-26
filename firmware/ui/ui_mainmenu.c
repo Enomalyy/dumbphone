@@ -74,14 +74,28 @@ static const menu_item_t cat_settings[] = {
     { .label = "Held Presses",    .icon = I_BOLT,   .target = PAGE_SETTINGS },
 };
 
+/* The settings row each SETTINGS-category item lands on, by name, so the
+ * two lists may be reordered independently. One entry per cat_settings row. */
+static const setting_id_t cat_settings_rows[] = {
+    SETTING_MENU_STYLE,
+    SETTING_CALL_PREF,
+    SETTING_SPEED_DIALS,
+    SETTING_HELD_PRESS,
+};
+
+#define ARRAY_LEN(a) ((int)(sizeof(a) / sizeof((a)[0])))
+
+_Static_assert(ARRAY_LEN(cat_settings_rows) == ARRAY_LEN(cat_settings),
+               "every SETTINGS menu item needs a settings row");
+
 static const struct {
     const menu_item_t *items;
     int n;
 } g_cat_items[] = {
-    { cat_messaging,  3 },
-    { cat_calls,      3 },
-    { cat_maps,       5 },
-    { cat_settings,   4 },
+    { cat_messaging, ARRAY_LEN(cat_messaging) },
+    { cat_calls,     ARRAY_LEN(cat_calls)     },
+    { cat_maps,      ARRAY_LEN(cat_maps)      },
+    { cat_settings,  ARRAY_LEN(cat_settings)  },
 };
 
 /* The main menu is one menu_t: a populated category strip whose item list
@@ -89,10 +103,10 @@ static const struct {
 static menu_t g_menu_m = {
     .title    = "MENU",
     .items    = cat_messaging,
-    .n_items  = 3,
+    .n_items  = ARRAY_LEN(cat_messaging),
     .sel      = 0,
     .cats     = g_cats,
-    .n_cats   = 4,
+    .n_cats   = ARRAY_LEN(g_cats),
     .cat_sel  = 0,
     .keys     = km_menu,
 };
@@ -146,6 +160,14 @@ const keymap_t *ui_mainmenu_keymap(void)
 void ui_mainmenu_cycle_cat(int dir)
 {
     menu_cycle_cat(dir);
+}
+
+int ui_mainmenu_selected_setting(void)
+{
+    if (g_menu_m.items != cat_settings || g_menu_m.sel >= g_menu_m.n_items) {
+        return -1;
+    }
+    return (int)cat_settings_rows[g_menu_m.sel];
 }
 
 /* Re-apply the settings' menu style to the main menu. The toggle lives on

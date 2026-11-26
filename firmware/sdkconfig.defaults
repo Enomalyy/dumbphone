@@ -1,10 +1,16 @@
 # Prototype #1 target: ESP32-S3 (WiFi-only, no cellular modem yet).
 CONFIG_IDF_TARGET="esp32s3"
 
-# 16 MB flash / 8 MB PSRAM is the planned PoC board class; boot/OTA layout is
-# left at IDF defaults for now (Phase 1 scaffold only).
-CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
-CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
+# Dev board: Waveshare ESP32-S3-Touch-LCD-3.5, module N16R8 =
+# 16 MB quad flash + 8 MB octal PSRAM. Boot/OTA partition layout is still the
+# IDF default (Phase 1 scaffold only).
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+
+# PSRAM: the draw buffers and other large allocations are planned to live here
+# (ui-architecture.md section 11), so it must be enabled from the start.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
 
 # Panics decoded to UART, then halt (readable in `idf.py qemu monitor`).
 CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT=y

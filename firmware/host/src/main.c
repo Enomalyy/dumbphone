@@ -14,7 +14,8 @@
  *
  * Browser viewport: a small HTTP/WebSocket server serves the composed window
  * as JPEG frames and accepts taps/named keys back (see frame_server.c).
- * Default bind is the tailnet address; --no-server disables it.
+ * Default bind is 127.0.0.1 (override: DUMBPHONE_SERVER_BIND or
+ * --server-bind); --no-server disables it.
  *
  * Harness mode (no window, deterministic frame dumps; the clock is frozen
  * at 20:36 so a frame is reproducible regardless of when it was taken):
@@ -249,7 +250,14 @@ int main(int argc, char **argv)
     int tap_x = 0, tap_y = 0;        /* a point touch (panel px)          */
     int hold_ms = 0;                /* how long --key presses stay down */
     const char *menu_style = NULL;   /* "carousel" | "grid"         */
-    const char *bind_ip = "100.110.199.62";
+    /* Loopback by default: the viewport is a dev tool and should not be
+     * reachable from other machines unless asked. To drive it from a phone
+     * on your LAN/tailnet, set DUMBPHONE_SERVER_BIND or pass --server-bind
+     * (an address on this machine, or 0.0.0.0 for all interfaces). */
+    const char *bind_ip = getenv("DUMBPHONE_SERVER_BIND");
+    if (!bind_ip || !bind_ip[0]) {
+        bind_ip = "127.0.0.1";
+    }
     float scale = 0.0f;          /* 0 = auto-fit */
     int frames = 40;
     int server_port = 8099;

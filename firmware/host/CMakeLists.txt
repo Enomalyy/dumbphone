@@ -102,6 +102,7 @@ target_include_directories(dumbphone-desktop PRIVATE
 target_compile_definitions(dumbphone-desktop PRIVATE
     FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts"
     CHAT_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/chats.json"
+    CHAT_SAMPLE_PATH="${FW_DIR}/fixtures/chats.sample.json"
 )
 
 # Optional flush instrumentation (see `just build-desktop-stats`): counts
