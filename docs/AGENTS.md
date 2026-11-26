@@ -100,17 +100,17 @@ Screenshots contain real chat names — Eli was told; sanitise if he asks.
 
 The plan lives in **three places, and they must agree**:
 
-1. **`ROADMAP.md`** — the staged plan in one table (Stage 0, A, B, C, D), each row pointing at its
-   spec section and its GitHub issue.
-2. **`ui-architecture.md`** — the design authority. §13–§15 hold the queued work in detail; §10 is the
+1. **`ROADMAP.md`** — the plan in one ordered table (Stage 0 done, then R1, R3, A, B, C, R4+D, R5),
+   each row pointing at its spec section and its GitHub issue.
+2. **`ui-architecture.md`** — the design authority. §13–§16 hold the queued work in detail; §10 is the
    checklist for adding a page. If code and spec disagree, the spec is right until Eli says otherwise.
-3. **GitHub issues** — the live status: `https://github.com/Enomalyy/dumbphone/issues`. One issue per
-   stage, labelled `stage-0` … `stage-d`.
+3. **GitHub issues** — the live status: `https://github.com/Enomalyy/dumbphone/issues`.
 
-Not one of the three: **`reorg-plan.md`** is an outside structural proposal (steps R1–R5 placed
-around the stages: golden-check CI, a port seam inside Stage 0, a page registry, a model layer, the
-UI in the S3 build). It is not the plan until a step has an issue. Read it before reworking the
-screen stack, page routing or the build, so the same ground isn't redone two ways.
+**`reorg-plan.md` is no longer a side proposal: its elements are folded into the plan** (Eli, 26/11).
+The structural steps R1–R5 live in spec **§16** (`16.1` golden-check + tests, `16.2` the port seam —
+folded into R5, `16.3` page registry, `16.4` model layer, `16.5` the UI in the S3 build, `16.6` the
+rules that come with them) and in ROADMAP's order. Read §16 before reworking the screen stack, page
+routing or the build.
 
 **Conventions:**
 - Start from an issue, not from a chat message. Read the issue and its spec section, then work.
@@ -121,3 +121,9 @@ screen stack, page routing or the build, so the same ground isn't redone two way
   If the requirement can't be met, stop and report that.
 - The publish hook mirrors every `dumbphone/` commit to the public repo, so commits are public
   immediately. Write them accordingly.
+- **The public repo is a publish mirror, never a merge target.** PRs there are read, verified and
+  ported into this tree with the author credited; a GitHub merge would be overwritten by the next
+  publish. Two things there are *not* bugs: relative doc links that resolve in this layout, and
+  references to `ESP32 phone.txt`, `relay/`, `datasheets/`, `transcripts/` — deliberately unpublished.
+- **A change that moves pixels names the frames it moves.** Golden frames stay AE=0 unless the commit
+  says which ones changed and why (R1's `just golden-check` is what will enforce it).

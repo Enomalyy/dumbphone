@@ -4,8 +4,10 @@ An outside structural review of the public repo, plus a proposed order for the s
 **fitted around the existing [`ROADMAP.md`](ROADMAP.md) stages rather than competing with them**.
 To avoid name clashes with "Stage 0, A–D", the steps here are called **R1–R5**.
 
-**Status:** a proposal. Nothing here is in the roadmap or the issues until Eli decides it is. The
-small fixes in §2 come with a PR. The steps in §3 are suggestions with no work started.
+**Status: FOLDED INTO THE PLAN (26/11, Eli's call).** This file is kept as the review's own record.
+§3 (R1–R5) is now designed in `ui-architecture.md` **§16** and ordered in `ROADMAP.md`; §2's fixes
+landed as PR #6 (ported, commit `3cb64a47`); §0's cautions and §3's ground rules are in `AGENTS.md`.
+Do not treat anything below as a separate proposal — if this file and §16 disagree, §16 wins.
 
 ---
 

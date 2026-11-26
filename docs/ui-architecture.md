@@ -658,3 +658,102 @@ not beautiful at every size. Once a real panel is chosen we go back and tune aga
 It forces the constants out of the layout while the code is still small, and it makes the screen
 choice a data point we can look at instead of a guess. It is also the cheapest possible time to do
 it: after §14 there will be far more layout code to unpick.
+
+---
+
+## 16. Structural work — folded from the outside review (26/11)
+
+`reorg-plan.md` was an outside proposal that sat *beside* the roadmap and did not count as plan.
+Eli's call (26/11 20:47): **it is part of the plan now, element by element.** This section is the
+design of those elements; `ROADMAP.md` holds their place in the order. Where the review said
+"proposed", read "planned". The parts it got wrong or that Stage 0 has overtaken are stated here,
+not quietly dropped.
+
+### 16.1 R1 — the safety net: golden-check and the first unit test
+
+Stage 0 touched every layout constant and was verified by hand; Stages A–D will touch every page.
+The check has to be a command, not a careful person.
+
+- **`scenes.txt`** — the table in `screenshots/README.md` (frame name → harness flags) becomes a
+  machine-readable list, one line per scene.
+- **`just golden-check`** — renders every scene into a temporary directory and compares it with the
+  committed PNG, failing on any difference; `just golden-update` rewrites the committed frames.
+  Frames are never "updated" as a side effect of running the check.
+- **Window frames are part of it.** `window-*.png` are the only check on the compose path
+  (review 26b §7.1); two defects shipped invisibly to all the panel frames. A change that touches
+  `host/src/hal_sdl_display.c` or `bezel.c` must be judged by them.
+- **`just test-host`** stops being a stub: a C test binary, no framework beyond a main() and
+  asserts unless one is already vendored. First test is `ui_text`'s direction rule (review 26b §6),
+  because it is display-free by design; then `ui_geometry`'s derivations at several sizes.
+- **CI**: the public repo is a *publish mirror*, so a GitHub workflow proves the mirror builds, not
+  that the tree is good — a PR there cannot be merged and will be overwritten by the next publish.
+  The gate is **local** (`just check` = build + golden-check + test-host). A mirror workflow is
+  optional and, if added, is a smoke test only; the source of truth never moves.
+
+### 16.2 R2 — the port seam (`ui_port.h`) — overtaken by Stage 0
+
+The proposal was for `ui/` to stop owning display creation, the tick (`clock_gettime`), the clock
+(`localtime_r`), font loading by path (`FONT_DIR`) and the UI-thread assertion, and for the target
+to supply them through one small `ui_port.h`. Stage 0 made geometry runtime but shipped the rest as
+it was, so the seam is **not built**.
+
+It is not lost work: the same five calls are exactly what §11's S3 port needs. It is therefore
+folded into **R5** rather than run as its own stage — R5 cannot land without it, and doing it alone
+would buy nothing on the desktop.
+
+### 16.3 R3 — the page registry
+
+Adding a page today costs the six touch points in §10 — five `switch`/`if` chains in
+`ui_shell.c`, two id enums (`page_id_t`, `ui_screen_id_t`) and a hand-counted `LIST_POOL`. One
+description per page replaces them:
+
+```c
+typedef struct {
+    const char     *name;      /* harness --screen name, for free          */
+    page_id_t       id;
+    ui_screen_id_t  screen;
+    lv_obj_t      (*build)(void);       /* NULL when the page has no root  */
+    const keymap_t *keymap;
+    void          (*activate)(void);
+    void          (*cycle)(int dir);
+    const opt_entry_t *(*options)(int *n);
+} ui_page_t;
+
+extern const ui_page_t ui_pages[];      /* one table, one row per page    */
+```
+
+Show / keymap / activate / move / swipe / options / `--screen` all become loops over the table;
+`LIST_POOL` becomes `ARRAY_LEN(ui_pages)` (a page that is not in the table cannot be reached, so the
+pool cannot be under-counted). §10 becomes "write the module, add one row". The table is the one
+place that knows the app's page set, which is what makes Stages A and D cheap.
+
+### 16.4 R4 — the model layer
+
+Stage D needs a real message model. It is built as a `model/` layer the UI reads and the WAHA relay
+later writes — chats, messages, contacts, the call log, settings — instead of the mock data and
+settings state that live inside page modules today (`ui_calls.c`, `ui_speeddial.c`,
+`ui_settings.c`, the slice builder in `ui_messaging.c`). `chat_model.h` is the pattern, generalised.
+Settings persist through `hal_storage` (which also gives Stage A's Display preferences somewhere to
+live). **This is the first half of Stage D, not a separate stage.**
+
+### 16.5 R5 — the UI in the S3 build
+
+`main/CMakeLists.txt` compiles only the scaffold, so "`build-s3` is clean" says nothing about the
+UI. `hal`, `ui` and `model` become ESP-IDF components whose `CMakeLists.txt` also works as a plain
+CMake library for the host, so the host source list stops being a hand-maintained second copy.
+Also: LVGL pinned once for both builds (submodule or IDF component), the draw buffer in PSRAM (§11),
+and the `ui_port.h` seam from 16.2 implemented for the chip. This is the work that turns the
+simulator into a device.
+
+### 16.6 Rules that come with the fold
+
+- **A change that moves pixels names the frames it moves.** Golden frames stay AE=0 unless the
+  commit says which ones changed and why. `just golden-check` is what makes this enforceable.
+- **The mirror is a publish artifact.** Port PRs into the private tree; never make GitHub the source
+  of truth for `firmware/`. Outside contributions are read, verified, and landed as our commits with
+  authorship recorded (`CONTRIBUTING.md` asks them for `-s`).
+- **Two things in the mirror are not bugs:** relative doc links that resolve in the private layout,
+  and references to `ESP32 phone.txt`, `relay/`, `datasheets/`, `transcripts/` — deliberately
+  unpublished. Do not "fix" either.
+- **Do not move docs or screenshots in the mirror**; `publish.sh` decides that layout, so a move has
+  to start in the private tree.
