@@ -20,7 +20,9 @@ that relays modern apps (WhatsApp, Mail, Maps, banking) to a thin client.
   `ui_mainmenu` the carousel, `ui_leaf` lock + stub pages,
   `ui_input` the HAL event pump, `ui_shell.c` the frame + screen stack + key dispatcher;
   `host/` = SDL2 backends for `hal_display`/`hal_input` plus stubs, `just
-  build-desktop|run-desktop|shot-desktop|shot-window`. `host/src/bezel.c` holds the simulated
+  build-desktop|run-desktop|shot-desktop|shot-window|picker`. Panel size is runtime (`--geom WxH`,
+  `just geom=WxH shot-desktop`, spec §15); `tools/geom-picker.py` (`just picker`, :8096) is the
+  tap-a-size page for a phone or tablet — it restarts the simulator at that geometry. `host/src/bezel.c` holds the simulated
   PHYSICAL keys as one data table around the panel — classic T9: vol/power side keys, circular
   d-pad + OK, L/R shoulders, CALL/END, and the 3x4 keypad (1-9, *, 0, #). A cap click fires the
   same named HAL key the keyboard does; UP/DOWN move the list selection, CENTER opens the main

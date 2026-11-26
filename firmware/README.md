@@ -170,6 +170,20 @@ scale; the panel buffer is always 320x480 regardless.
 Dependencies on this box live in `~/dev-deps` (user-space headers/libs extracted from RPMs);
 override with `DEPS_PREFIX=/path just build-desktop`.
 
+### Panel geometry — the picker
+
+The panel is a start-up property (`--geom WxH`, or `just geom=WxH shot-desktop <screen>`; presets are
+320x480 the dev board, 240x320, 240x400, 320x240, 480x640, 480x800, 1280x720, plus free-form). To
+change it from a phone or tablet, run the harness picker:
+
+```sh
+python3 tools/geom-picker.py          # http://<this machine>:8096/
+```
+
+It lists the presets and a free-form field; tapping one restarts the simulator at that size and
+sends you back to the viewport (which stays on `:8099`). It only drives `build-host/dumbphone-desktop`,
+so it is a harness tool — not part of the firmware and not shipped to the device.
+
 ## Status
 
 Phase 1 scaffold (S3 boots under QEMU) + a complete navigable UI in the Tier-1 simulator:

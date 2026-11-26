@@ -56,6 +56,10 @@
 
 static bezel_button_t s_buttons[BUTTON_COUNT];
 
+/* The d-pad centre in window coordinates; bezel_layout() fills these and
+ * draw_dpad() paints the ring. */
+static int s_dpad_cx, s_dpad_cy;
+
 static void bezel_layout(int pw, int ph)
 {
     const int px = SIDE_W;                    /* panel recess top-left */
@@ -70,6 +74,11 @@ static void bezel_layout(int pw, int ph)
     const int keypad_y0  = py + ph + DECK(130);
     const int keypad_x0  = dpad_cx - (KEYPAD_KEY_W * 3 + KEYPAD_GAP * 2) / 2;
     int i = 0;
+
+    /* The painter needs the d-pad centre too; it used to be a file-scope
+     * constant, and Stage 0 moved the geometry here without carrying it. */
+    s_dpad_cx = dpad_cx;
+    s_dpad_cy = dpad_cy;
 
     /* ---- side keys ---- */
     s_buttons[i++] = (bezel_button_t){ "vol-up",   "VOL+", NULL, HAL_KEY_VOLUME_UP,   4, vol_up_y, 36, 62, BEZEL_STYLE_SIDE,  BEZEL_SHAPE_RECT };
@@ -126,7 +135,6 @@ static int   s_win_w;
 static int   s_win_h;
 static int   s_pw, s_ph;      /* runtime panel size (logical units)    */
 static int   s_log_w, s_log_h; /* window size in logical units          */
-static int   s_dpad_cx, s_dpad_cy;
 
 typedef struct {
     Uint32 bg, rim, rim_hi, grille;

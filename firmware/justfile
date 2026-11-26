@@ -142,3 +142,9 @@ clean:
 # Wipe both.
 clean-all: clean
     rm -rf build-host
+
+# Panel-geometry picker for a phone or tablet (spec §15): a small page that
+# restarts the simulator at the size you tap. Harness tool, not firmware.
+#   just picker          -> http://<this machine>:8096/
+picker: build-desktop
+    python3 ../tools/geom-picker.py
