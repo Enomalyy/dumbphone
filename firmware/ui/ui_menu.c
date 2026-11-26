@@ -36,13 +36,14 @@
 #define ROW_INSET_X   UI_ROW_INSET_X
 #define ROW_INSET_W   UI_ROW_INSET_W
 #define LABEL_X       UI_ROW_LABEL_X
-#define LABEL_W       UI_ROW_LABEL_W
 #define SUB_X         UI_ROW_SUB_X
 #define SUB_W         UI_ROW_SUB_W
 #define META_X        UI_ROW_META_X
 #define META_W        UI_ROW_META_W
 #define BADGE_X       UI_ROW_BADGE_X
 #define BADGE_W       UI_ROW_BADGE_W
+#define RIGHT_PAD     UI_ROW_RIGHT_PAD
+#define COL_GAP       UI_ROW_COL_GAP
 
 /* Grid layout (LAYOUT_GRID): the classic 3-wide app grid, one cell per
  * item in reading order. Both layouts render the same `items` data. */
@@ -128,6 +129,57 @@ static lv_obj_t *mk_data_line_label(lv_obj_t *parent, const char *text,
      * with RIGHT below.) */
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
     return lbl;
+}
+
+/* ------------------------------------------------------------------ */
+/* Row column sizing — measured, not reserved                          */
+/* ------------------------------------------------------------------ */
+
+/* Pixel width of `s` drawn on ONE line in `font`. Used to give a row's
+ * label exactly the space the row's other columns leave it, in those
+ * columns' own fonts (so a font change in Settings re-measures too). */
+static int text_px(const char *s, const lv_font_t *font)
+{
+    lv_point_t sz = { 0, 0 };
+    lv_text_get_size(&sz, s, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return sz.x;
+}
+
+/* How much of a `row_w`-wide row the label column may use.
+ *
+ * Rule: a row reserves only what it actually draws. No value and no badge
+ * -> the label runs to the row's right pad. A value and/or a badge -> the
+ * label stops COL_GAP short of the FIRST right-hand column, positioned from
+ * that column's own measured width. The value column is still right-aligned
+ * on META_X + META_W for every row (values stay in one column); what stops
+ * is the over-reservation: a fixed 142 px label box truncated a 15-character
+ * row label ("Call Prefer...") even when the row's value sat far to the
+ * right of it. The ellipsis is now only for text that genuinely does not
+ * fit beside what the row draws. */
+static int label_width(const menu_item_t *it, int row_w)
+{
+    int right = row_w - RIGHT_PAD;
+
+    if (it->meta && it->meta[0]) {
+        int mx = META_X + META_W - text_px(it->meta, ui_font_chrome_s());
+        if (mx < META_X) {
+            mx = META_X;   /* over-long value: stays clipped at its box   */
+        }
+        if (mx < right) {
+            right = mx;
+        }
+    }
+    if (it->badge > 0) {
+        char b[8];
+        snprintf(b, sizeof b, "[%d]", it->badge);
+        int bx = BADGE_X + BADGE_W - text_px(b, ui_font_chrome_s());
+        if (bx < right) {
+            right = bx;
+        }
+    }
+
+    int w = right - COL_GAP - LABEL_X;
+    return w > 16 ? w : 16;
 }
 
 /* ------------------------------------------------------------------ */
@@ -295,10 +347,13 @@ static void rebuild_rows(list_page_t *p)
                                        8, 1, 22);
             p->row_icon[i]  = mk_label(row, it->icon, ui_font_icon(), pal->text,
                                        32, 6, 26);
-            /* The name column ends where the badge column starts: long names
-             * truncate with dots, never overlap. */
+            /* The name column ends just before whatever the row actually
+             * draws to its right — measured per row (label_width), so a
+             * row with a short value does not truncate the label. Long
+             * names still truncate with dots, never overlap. */
             p->row_lbl[i]   = mk_data_line_label(row, it->label, ui_font_body_l(),
-                                                 pal->text, LABEL_X, 1, LABEL_W, 26);
+                                                 pal->text, LABEL_X, 1,
+                                                 label_width(it, w), 26);
 
             /* Optional row extras: second line, right-aligned meta (time),
              * unread badge. Coords match the chat-row layout (gen-08). */

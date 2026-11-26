@@ -67,10 +67,12 @@ extern "C" {
 #define UI_ROW_INSET_X      4   /* row inset from the panel's left edge */
 #define UI_ROW_INSET_W      8   /* row width = UI_PANEL_W - this        */
 
-/* Columns inside a row (relative to the row box). The name column stops
- * where the badge column starts; the value/time column is right-aligned. */
+/* Columns inside a row (relative to the row box). The value/time column is
+ * right-aligned; the label column's width is measured per row (see below). */
 #define UI_ROW_LABEL_X     62   /* primary line (name / item label)     */
-#define UI_ROW_LABEL_W    142   /* ends where the value column starts  */
+/* The label's WIDTH is not a token: it is measured per row from what the
+ * row actually draws to the right of it (ui_menu.c label_width()). A fixed
+ * reservation truncated labels that had room to spare. */
 #define UI_ROW_SUB_X       62   /* optional second line (preview)       */
 #define UI_ROW_SUB_W      242
 #define UI_ROW_META_X     200   /* right-aligned value / time column    */
@@ -79,6 +81,9 @@ extern "C" {
                                  * glyph is never clipped              */
 #define UI_ROW_BADGE_X    214   /* unread badge "[n]"                   */
 #define UI_ROW_BADGE_W     40
+#define UI_ROW_RIGHT_PAD    8   /* right edge of every row column      */
+#define UI_ROW_COL_GAP      6   /* min gap between the label and the
+                                 * first right-hand column present     */
 
 /* A page that has a category strip (the main menu, the chat list) reserves
  * the top of the content area for the icon tray + the category title. */
