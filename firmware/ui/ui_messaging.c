@@ -58,7 +58,9 @@ static int g_unread_total = 0;   /* sum of unread, filled at build time */
  * those live on HOME. */
 static const keymap_t km_messaging = {
     .shoulder_l = ACT_OPEN_OPTIONS, /* options sidebar (spec §1)     */
-    .shoulder_r = ACT_NOOP,        /* nothing behind this page        */
+    .shoulder_r = ACT_GO_BACK,     /* back to the menu — Messaging is a
+                                    * page under the menu, not a root;
+                                    * only HOME is root (Eli, 26/11)  */
     .center     = ACT_ACTIVATE,    /* open the selected chat          */
     .call       = ACT_NOOP,        /* CALL lives on HOME              */
     .end        = ACT_GOTO_HOME,   /* END returns to HOME from any page */

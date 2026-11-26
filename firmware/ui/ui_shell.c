@@ -29,6 +29,7 @@
 #include "hal/hal_input.h"
 #include "ui_calls.h"
 #include "ui_heldpress.h"
+#include "font_pixelify.h"
 #include "ui_keymap.h"
 #include "ui_menu.h"
 #include "ui_home.h"
@@ -83,7 +84,10 @@ static lv_font_t *f_chrome;    /* Silkscreen — status bar, soft keys     */
 static lv_font_t *f_chrome_s;  /* Silkscreen small — tabs                */
 static lv_font_t *f_title;     /* Silkscreen large — "MENU"              */
 static lv_font_t *f_body_l;    /* VT323 — primary list text              */
-static lv_font_t *f_body_m;    /* VT323 — preview / secondary text       */
+static lv_font_t *f_body_m;    /* Pixelify Sans 16 — preview / secondary */
+/* Mutable shallow copy of the const baked descriptor (font_pixelify.h):
+ * only `fallback` is written on it; bitmap/dsc tables stay shared. */
+static lv_font_t body_m_copy;
 static lv_font_t *f_icon;      /* Font Awesome solid                     */
 static lv_font_t *f_icon_s;    /* Font Awesome solid, small (carets)     */
 
@@ -998,8 +1002,15 @@ int ui_shell_init(void)
     f_chrome   = load_font("Silkscreen-Regular.ttf", UI_FONT_CHROME_PX, &lv_font_montserrat_14);
     f_chrome_s = load_font("Silkscreen-Regular.ttf", UI_FONT_CHROME_S_PX, &lv_font_montserrat_12);
     f_title    = load_font("Silkscreen-Regular.ttf", UI_FONT_TITLE_PX, &lv_font_montserrat_20);
+    /* Large body face: VT323 as a TTF (Eliyahu's call, 26/11 — the big
+     * letters read better in it than in Pixelify). Small body face is
+     * baked 8-bit Pixelify Sans (font_pixelify.h): always present, no TTF
+     * load. Its descriptor is const rodata, so chain_fallbacks() gets a
+     * mutable shallow copy — only the `fallback` pointer is ever written;
+     * bitmaps stay shared. */
     f_body_l   = load_font("VT323-Regular.ttf", UI_FONT_BODY_L_PX, &lv_font_montserrat_18);
-    f_body_m   = load_font("VT323-Regular.ttf", UI_FONT_BODY_M_PX, &lv_font_montserrat_14);
+    body_m_copy = lv_font_pixelify_m;
+    f_body_m   = &body_m_copy;
     f_icon     = load_font("FA-Solid.ttf", UI_FONT_ICON_PX, &lv_font_montserrat_16);
     f_icon_s   = load_font("FA-Solid.ttf", UI_FONT_ICON_S_PX, &lv_font_montserrat_12);
 

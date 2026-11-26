@@ -37,13 +37,19 @@
 #include <time.h>
 
 #include "bezel.h"
+#ifndef __EMSCRIPTEN__
 #include "frame_server.h"
+#endif
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
 #include "ui/ui_settings.h"
 #include "ui/ui_shell.h"
 
 #include "hal_sdl_host.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 static void sleep_ms(long ms)
 {
@@ -68,6 +74,22 @@ static void *ui_thread(void *arg)
     }
     return NULL;
 }
+
+#ifdef __EMSCRIPTEN__
+/* WebAssembly build (web/build.sh): GitHub Pages cannot set COOP/COEP
+ * headers, so SharedArrayBuffer is unavailable and -pthread is off the
+ * table. main() therefore only initialises; the page's own
+ * requestAnimationFrame loop (web/index.html) drives one pump per frame via
+ * web_frame_pump() (web_hooks.c), which drains SDL's DOM events (mouse/
+ * keyboard -> hal_input_sdl_event, the same path as the desktop pump) and
+ * then runs the SAME ui_shell_run_iteration() the desktop UI thread does.
+ * ui/ is untouched; only this entry point changes shape.
+ *
+ * (Emscripten 7's built-in rAF wrappers — emscripten_set_main_loop /
+ * emscripten_request_animation_frame_loop — registered their C callback
+ * from here but never fired it in our verification environment, while a
+ * plain page-side rAF + ccall runs at a steady 60fps.)
+#endif
 
 /* Write the pure panel framebuffer (RGB565) as a binary PPM (RGB888). */
 static int write_ppm(const char *path)
@@ -334,6 +356,12 @@ int main(int argc, char **argv)
         setenv("SDL_VIDEODRIVER", "dummy", 1);
     }
 
+#ifdef __EMSCRIPTEN__
+    /* The web page scales the canvas with CSS; keep the logical window at
+     * its native size so input mapping and the page's fit math are
+     * deterministic (408x789 at scale 1.0). */
+    scale = 1.0f;
+#endif
     hal_display_set_scale(scale);
 
     if (hal_display_init() != 0) {
@@ -362,6 +390,19 @@ int main(int argc, char **argv)
     if (shot_path || shot_win_path) {
         ui_shell_set_clock_freeze(true);
     }
+
+#ifdef __EMSCRIPTEN__
+    /* Single-threaded web entry: initialise the shell here (the desktop
+     * build does it on the UI thread), then hand control to the rAF main
+     * loop, which never returns. */
+    if (ui_shell_init() != 0) {
+        fprintf(stderr, "[ui] ui_shell_init failed\n");
+        return 1;
+    }
+    /* The page's rAF loop now owns the pump (web_frame_pump); main() is
+     * done. */
+    return 0;
+#endif
 
     pthread_t ui;
     if (pthread_create(&ui, NULL, ui_thread, NULL) != 0) {
@@ -485,6 +526,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
+#ifndef __EMSCRIPTEN__
     if (server_enabled) {
         int port = frame_server_start(bind_ip, server_port, server_fps);
         if (port > 0) {
@@ -508,5 +550,6 @@ int main(int argc, char **argv)
     ui_shell_request_quit();
     pthread_join(ui, NULL);
     hal_display_shutdown();
+#endif
     return 0;
 }

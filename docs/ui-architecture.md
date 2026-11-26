@@ -124,12 +124,13 @@ pass; adding one is the work a second theme needs.
 
 ### Text, fonts and direction
 
-The pixel faces stay primary: **Silkscreen** for chrome/titles, **VT323** for list text,
+The pixel faces stay primary: **Silkscreen** for chrome/titles, **VT323** for the large
+list text, **Pixelify Sans** (baked 8-bit) for the small preview/conversational text,
 **Font Awesome** for icons. Real chat data is Hebrew, mixed Hebrew/English and emoji, so
 every face carries a runtime fallback chain (`lv_font_t.fallback`):
 
 ```
-Silkscreen / VT323 / FA  ->  Droid Sans Hebrew (same px)  ->  Noto Emoji subset (same px)
+Silkscreen / VT323 / FA / Pixelify  ->  Droid Sans Hebrew (same px)  ->  Noto Emoji subset (same px)
 ```
 
 Only code points the primary face reports missing reach a fallback, so Latin never leaves the
@@ -298,13 +299,15 @@ The simulator hides costs the device will pay. They are known, not solved:
   LVGL objects on each category cycle / value refresh (chat list = ~33 rows × 4 labels).
   That is fine on a desktop, but it is allocation churn on the device; a fixed row pool that
   relabels and hides extras removes it.
-- **Fonts cost flash and RAM (new 26/11).** The bundle is 1,389,480 B total:
+- **Fonts cost flash and RAM (new 26/11).** The TTF bundle is 1,389,480 B total:
   Silkscreen 32,220 B, VT323 153,116 B, Font Awesome 420,332 B,
-  **Droid Sans Hebrew 30,024 B**, **monochrome Noto Emoji subset 753,788 B**.
-  tiny_ttf keeps one instance per `(face, px)` pair — 7 primary faces plus the
-  fallback table's **10 instances** (5 distinct px sizes × 2 faces, 13/16/18/22/24),
+  **Droid Sans Hebrew 30,024 B**, **monochrome Noto Emoji subset 753,788 B**; plus the
+  baked Pixelify Sans small body face, `font_pixelify_m.c` (64,661 B source).
+  tiny_ttf keeps one instance per `(face, px)` pair — 6 TTF primary faces (the baked
+  Pixelify face needs no instance) plus the fallback table's **10 instances**
+  (5 distinct px sizes × 2 faces, 13/16/18/22/24),
   each with its own glyph cache: `LV_TINY_TTF_CACHE_GLYPH_CNT` (128) descriptors plus
-  a second 128-entry bitmap cache, allocated lazily. That ceiling — 17 instances —
+  a second 128-entry bitmap cache, allocated lazily. That ceiling — 16 instances —
   is the RAM item to watch on the chip; lower the glyph count and/or drop the 13/22 px
   emoji instances there. On the device, ship the emoji
   face only at the sizes that carry data (18/24 px, 2 instances) and/or cut
@@ -359,3 +362,299 @@ Calls, Settings, options sidebar open and the lock screen (all match their keyma
 frames regenerated with the documented recipes; every diff is confined to the softkey bar
 except the intentional re-points (`home.png` new; `options-home`, `lock-from-chat`,
 `speeddial-mom`, `call-key` gained the HOME context); browser viewport re-captured live.
+
+## 13. Queued UI improvements (26/11, after §12)
+
+**13.1 Swipe-to-scroll must be uniform.**
+Drag-scrolling works where the surface happens to be an LVGL scroll target (the list page, the
+sidebar) but it is not a *rule* yet: settings, speed dials, call history, contacts and the grid view
+all have pages longer than the content area, and whether a drag scrolls them depends on how that
+page happened to be built. Make it a contract:
+
+- Every page whose content can exceed the content area is a scroll target and drag-scrolls with one
+  finger, at the same threshold and the same feel on every page.
+- A vertical drag scrolls and must never also select a row on release (the `press_moved` rule in
+  `ui_menu.c` is the pattern — apply it everywhere).
+- A horizontal drag cycles the category strip only on pages that have categories; elsewhere it does
+  nothing rather than half-scrolling.
+- The scroll position is per-page and survives going back and returning, or is deliberately reset to
+  the top when a page is entered fresh — pick one and document it.
+- Verify with the touch harness (`--tap`/`--swipe`), one screenshot per page at the scrolled position.
+
+## 14. The big UI wave (26/11, Eli's voice note) — SPECIFIED, NOT BUILT
+
+Eliyahu's list, to be executed as ONE wave (relay legs), then audited as before. Ordering matters:
+§14.7 depends on nothing else, but §14.1–§14.6 all land in the renderer/shell, so they must be one
+coherent change, not five overlapping edits.
+
+**14.0 The frame-rate reality that governs all of it.**
+The final device will run at a LOW frame rate. Responsiveness must come from *input latency and
+state change*, not from smooth motion. Animations are garnish; the UI must feel instant when a key
+is pressed even if the panel updates at 15 fps. Corollary: never block input waiting for an
+animation to finish — the action applies immediately and the animation is cosmetic. Exception:
+scrolling *must* be as smooth as the panel allows, because a finger is dragging it and stutter
+there reads as broken.
+
+**14.1 The category strip must be tappable.**
+The icons across the top (ALL / FAMILY / UNREAD / FAVORITES / ARCHIVED on Messaging, the four
+categories on the main menu) are currently display-only. Each must be a tap target that selects
+that category/section — the same state change the d-pad LEFT/RIGHT already produces. One code path:
+the tap calls the same cycle/select function the key does; no second implementation.
+
+**14.2 A NEW menu style: the moving carousel.**
+Alongside the existing `grid` and static `carousel` styles, add a third: the whole strip translates.
+Pressing RIGHT slides the strip left so the item previously to the right arrives at the centre and
+becomes the highlighted selection; LEFT mirrors it. A few frames of animation (2–4), driven by the
+existing renderer, not a new framework. The centred item is the only one drawn highlighted. The
+style is selectable through the same menu-style setting as the others.
+
+**14.3 "Menu style" is one cycling control, not a list of entries.**
+In Settings/Options there must be a single row labelled *Menu Style* whose activation cycles
+Grid → Carousel → Moving carousel → Grid…, showing the current value in the value column. Remove
+the separate per-style entries if any exist.
+
+**14.4 Swipe-to-scroll everywhere (supersedes §13.1 where they overlap).**
+Vertical drag scrolls every scrollable page; horizontal drag cycles categories where categories
+exist; a drag never also selects the row it started on. Add a small amount of motion so the scroll
+feels connected to the finger. This is the one place where frame rate matters most: it must feel
+smooth at whatever the panel can do.
+
+**14.5 Carousel icons grow when highlighted.**
+The selected icon in the carousel is drawn slightly larger than the others (a design token, not a
+hard-coded number), so the selection is legible at a glance without reading the label.
+
+**14.6 Menu cells: text placement.**
+Item text in the higher-level menu cells sits badly — it is not centred in its square, unlike the
+chat rows which look right. Fix the cell layout so label (and icon) are optically centred in the
+cell, with one shared rule for every menu type; add it to the design tokens if a margin is
+involved.
+
+**14.7 Opening a conversation — the big one.**
+Selecting a chat in Messaging currently does nothing beyond selection. It must open the
+conversation: message bubbles, sender grouping, timestamps, scrollback, and the reading pane the
+concept art describes — see `concept-art/07-gemini-innerchat-concept.jpg` and the chat-list
+reference `concept-art/gen-08-chatlist-clean.png` for the visual language (dark charcoal, flat,
+green/cyan accents, no gradients). This needs a real message model (`chat_model.h` today only
+describes rows), a per-chat message source (the desktop JSON fixture grows a messages array; the
+WAHA source comes later per §9), and a new page built on the existing `menu_t`/renderer where
+possible — do not fork the renderer for it. RTL/Hebrew and emoji must work in bubbles; long
+messages wrap; the page scrolls with §14.4's rules.
+
+**14.8 Held-down acceleration while scrolling.**
+Holding d-pad DOWN (or UP) continues to move the selection; after a short dwell (~400–500 ms) it
+accelerates (e.g. repeat interval halving to a floor), so a long list can be traversed without
+tapping repeatedly. Release stops immediately. Must not fight the long-press action already bound
+to keys (§ held-press config) — decide and document which wins, and why.
+
+**Acceptance for the wave (the relay charter inherits this):**
+- All of §14.1–§14.8 demonstrably working in the simulator, each verified by screenshot per state.
+- Golden frames regenerated; frames not intended to change are AE=0.
+- `just build-desktop` zero warnings, `just build-s3` clean.
+- No new frameworks, no hot-path allocation, every new visual number is a token in `ui_theme.h`.
+- The perf rule of §14.0 respected: input never waits on an animation.
+
+**14.9 Hide the softkey bar (Settings → Display).**
+A toggle that removes the bottom context bar and lets the content area take that space. It is a
+layout change, not a cosmetic one: `SOFTKEYS_H` becomes a runtime value, the content area resizes,
+and every built page re-lays out (or is rebuilt) on the toggle. When hidden, the legend is gone —
+the physical keys still do what the keymap says; that is the accepted trade. Ship it defaulting to
+*shown*.
+
+**14.10 Colour: one role table, all menus, switchable palettes.**
+Every colour in the UI is a *role*, defined once and used by every page and every menu type. Pages
+never name a colour — they ask for a role. A palette is a table of role → RGB565. Adding a theme is
+adding one entry to the palette table; nothing else changes (Eli, 26/11).
+
+The roles (this is the complete list — anything not here does not get its own colour):
+
+| Role | What it paints | Palette A (today) | Palette B (light) |
+|---|---|---|---|
+| `GROUND` | page background | near-black charcoal | white |
+| `SURFACE` | rows, cells, panels | dark slate | white / very light grey |
+| `BORDER` | frames, rails, dividers | dark slate | light blue-grey |
+| `TEXT` | primary text | off-white | black |
+| `TEXT_DIM` | meta, timestamps, previews | muted grey-green | grey |
+| `ACCENT` | icons, active tab, selection text | green | **bright orange** |
+| `HIGHLIGHT` | selection fill | green fill | **bright orange fill** |
+| `ACCENT_ALT` | secondary accent, category glyphs | cyan | light blue |
+| `ON_HIGHLIGHT` | text drawn on a highlight fill | near-black | black |
+
+Notes that make it usable rather than just tidy:
+- `ACCENT` and `HIGHLIGHT` are distinct roles even when a palette gives them the same colour — a
+  theme is allowed to make them differ, and several real themes do.
+- Contrast is a palette-level obligation, checked when the palette is added, not per page:
+  `TEXT` and `TEXT_DIM` must clear 4.5:1 on `GROUND` and `SURFACE`; `ON_HIGHLIGHT` must clear
+  4.5:1 on `HIGHLIGHT`. (Orange text on white is 2.6:1 — that is why orange is an accent/highlight
+  and never a text colour on a light ground.)
+- **Enforcement, not convention:** no RGB literal may appear outside the palette table. Add a check
+  to the build or a test that greps the UI for colour literals and fails if one escapes. Without
+  that, drift is guaranteed within two weeks.
+- **Images are assets, not colours.** The UI will draw JPEG/PNG content (wallpapers, icons, later
+  photo attachments). Those carry their own pixels and are *not* recoloured by a theme — a theme
+  selects *which* asset is used, it does not tint it. So the rule is: every colour the code
+  *generates* comes from a role; a decoded bitmap is data and passes through untouched. Where text
+  must stay legible over an image, use a scrim role (a role with alpha) rather than picking a text
+  colour that happens to work on that particular picture.
+- Consequently a theme owns its own wallpaper asset (or chooses none); the dark motif does not get
+  reused under a light ground. For now the theme *bundles* its wallpaper — but keep the wallpaper as
+  its own field in the theme struct rather than fused into a single "skin" blob, so a later
+  granular control (pick any wallpaper independently of the palette) is a setting, not a refactor.
+
+
+This is the reason the theme layer exists, and it closes audit §3.6 ("no runtime theme-swap pass"):
+colours must stop being compile-time constants in draw code and become a palette table read through
+the active-theme pointer, with a repaint pass that restyles every live object when the theme
+changes. Anything that cannot be restyled live must be documented as a rebuild-on-switch page.
+
+**14.11 Settings → Display → Themes.**
+The sub-menu that selects the palette. Display becomes a parent page holding *Theme*, *Menu Style*
+(§14.3) and *Softkey bar* (§14.9). Selection applies immediately (no confirm), and the choice
+persists for the session; on-device persistence is still the outstanding settings-store task.
+
+**14.12 Font choice in Settings → Display.**
+A third entry under Display, beside Theme and Menu Style: *Font*, cycling the UI typeface (Eli,
+26/11). The point of this entry is that **typeface and size become a preference, not a build-time
+decision** — Eli tunes them himself as the design settles. So the wave ships the *mechanism* and a
+sensible default, not a finely-argued opinion about which face wins.
+
+- The choices are the body typeface; the chrome face (Silkscreen) is part of the product's identity
+  and stays fixed unless Eli says otherwise. Flag it rather than assume silently.
+- Offer at least three faces, with the size alongside them (e.g. *Pixelify 16*, *Jersey 10*,
+  *DotGothic 16*), because size affects legibility more than face does at this panel density.
+- Faces may be baked at 1bpp (crisp) or 8bpp (antialiased); both are legitimate *options* — the
+  user picks what reads best — but the trade-off must be stated in the UI or README, not hidden.
+  Do not remove a face from the list on the grounds that it "looks soft"; that is Eli's call to make.
+- Candidates already evaluated: Pixelify Sans, Jersey 10, DotGothic16. Report the flash delta per
+  face (ASCII range, two sizes) so the bundle cost is visible when adding more.
+- Switching applies immediately through the same restyle pass as a theme change (§14.10), because
+  both are appearance-only and both must not touch navigation.
+- The selected font persists for the session alongside the theme; on-device persistence is still the
+  outstanding settings-store task.
+
+**Status of the current faces (interim, 26/11).** The tree currently has VT323 on the large body face
+and an 8bpp baked Pixelify on the small one. **That split is provisional and is not a decision on
+record** — it was produced by a session that then wrongly attributed it to Eliyahu. Do not treat it
+as settled, and do not cite it as a rationale. It stays only until this setting exists and Eli tunes
+it by hand.
+
+**14.9 Hide the softkey bar (Settings → Display).**
+A toggle that removes the bottom context bar and lets the content area take that space. It is a
+layout change, not a cosmetic one: `SOFTKEYS_H` becomes a runtime value, the content area resizes,
+and every built page re-lays out (or is rebuilt) on the toggle. When hidden, the legend is gone —
+the physical keys still do what the keymap says; that is the accepted trade. Ship it defaulting to
+*shown*.
+
+**14.10 Colour: one role table, all menus, switchable palettes.**
+Every colour in the UI is a *role*, defined once and used by every page and every menu type. Pages
+never name a colour — they ask for a role. A palette is a table of role → RGB565. Adding a theme is
+adding one entry to the palette table; nothing else changes (Eli, 26/11).
+
+The roles (this is the complete list — anything not here does not get its own colour):
+
+| Role | What it paints | Palette A (today) | Palette B (light) |
+|---|---|---|---|
+| `GROUND` | page background | near-black charcoal | white |
+| `SURFACE` | rows, cells, panels | dark slate | white / very light grey |
+| `BORDER` | frames, rails, dividers | dark slate | light blue-grey |
+| `TEXT` | primary text | off-white | black |
+| `TEXT_DIM` | meta, timestamps, previews | muted grey-green | grey |
+| `ACCENT` | icons, active tab, selection text | green | **bright orange** |
+| `HIGHLIGHT` | selection fill | green fill | **bright orange fill** |
+| `ACCENT_ALT` | secondary accent, category glyphs | cyan | light blue |
+| `ON_HIGHLIGHT` | text drawn on a highlight fill | near-black | black |
+
+Notes that make it usable rather than just tidy:
+- `ACCENT` and `HIGHLIGHT` are distinct roles even when a palette gives them the same colour — a
+  theme is allowed to make them differ, and several real themes do.
+- Contrast is a palette-level obligation, checked when the palette is added, not per page:
+  `TEXT` and `TEXT_DIM` must clear 4.5:1 on `GROUND` and `SURFACE`; `ON_HIGHLIGHT` must clear
+  4.5:1 on `HIGHLIGHT`. (Orange text on white is 2.6:1 — that is why orange is an accent/highlight
+  and never a text colour on a light ground.)
+- **Enforcement, not convention:** no RGB literal may appear outside the palette table. Add a check
+  to the build or a test that greps the UI for colour literals and fails if one escapes. Without
+  that, drift is guaranteed within two weeks.
+- **Images are assets, not colours.** The UI will draw JPEG/PNG content (wallpapers, icons, later
+  photo attachments). Those carry their own pixels and are *not* recoloured by a theme — a theme
+  selects *which* asset is used, it does not tint it. So the rule is: every colour the code
+  *generates* comes from a role; a decoded bitmap is data and passes through untouched. Where text
+  must stay legible over an image, use a scrim role (a role with alpha) rather than picking a text
+  colour that happens to work on that particular picture.
+- Consequently a theme owns its own wallpaper asset (or chooses none); the dark motif does not get
+  reused under a light ground. For now the theme *bundles* its wallpaper — but keep the wallpaper as
+  its own field in the theme struct rather than fused into a single "skin" blob, so a later
+  granular control (pick any wallpaper independently of the palette) is a setting, not a refactor.
+
+
+This is the reason the theme layer exists, and it closes audit §3.6 ("no runtime theme-swap pass"):
+colours must stop being compile-time constants in draw code and become a palette table read through
+the active-theme pointer, with a repaint pass that restyles every live object when the theme
+changes. Anything that cannot be restyled live must be documented as a rebuild-on-switch page.
+
+**14.11 Settings → Display → Themes.**
+The sub-menu that selects the palette. Display becomes a parent page holding *Theme*, *Menu Style*
+(§14.3) and *Softkey bar* (§14.9). Selection applies immediately (no confirm), and the choice
+persists for the session; on-device persistence is still the outstanding settings-store task.
+
+**14.12 Font choice in Settings → Display.**
+A third entry under Display, beside Theme and Menu Style: *Font*, cycling the UI typeface (Eli,
+26/11). Requirements:
+
+- The choices are the body typeface; the chrome face (Silkscreen) is part of the product's identity
+  and stays fixed unless Eli says otherwise. Flag it rather than assume silently.
+- Every offered face is baked at the body sizes, exactly like Pixelify Sans (8-bit) —
+  the crispness rule (§14.10's discipline; VT323 was kept for the large face on
+  Eliyahu's call, 26/11) applies to any font that is selectable.
+  A selectable-but-antialiased face would undo the typography work.
+- Candidates already evaluated for look: Pixelify Sans (current), Jersey 10, DotGothic16. Each costs
+  tens of KB of flash at 8bpp for the ASCII range at two sizes — report the bundle delta.
+- Switching applies immediately through the same restyle pass as a theme change (§14.10), because
+  both are appearance-only and both must not touch navigation.
+- The selected font persists for the session alongside the theme; on-device persistence is still the
+  outstanding settings-store task.
+
+## 15. STAGE 0 (alpha) — runtime resolution selector — DO THIS BEFORE §14
+
+Eli's call (26/11): the panel is not chosen yet. The UI must be *written* to render at a
+resolution rather than assuming one, and the simulator must let us switch resolution from outside
+the phone UI. This lands before any of §14, because every other visual decision inherits from it.
+
+**15.1 Dimensions become runtime values.**
+`PANEL_W`/`PANEL_H` stop being compile-time constants that leak into layout, buffers, HAL and the
+frame server. There is one source of truth for the current panel geometry (a `ui_screen_t` or
+equivalent), set at init and changeable at runtime. Compile-time defaults remain the 3.5" dev board:
+**320×480**.
+
+**15.2 A resolution picker outside the phone UI.**
+A developer control in the host harness — *not* a page inside the phone — offering aspect ratios and
+resolutions, at minimum:
+
+| Resolution | Aspect | Why |
+|---|---|---|
+| 320×480 | 2:3 | the dev board (default) |
+| 240×320 | 3:4 | small cheap QVGA panels |
+| 240×400 | 3:5 | common phone-ish |
+| 320×240 | 4:3 | landscape sanity check |
+| 480×800 | 3:5 | larger phone panel |
+| 480×640 | 3:4 | VGA |
+| 1280×720 | 16:9 | gross-out test, not a target |
+
+Plus a free-form width×height entry, and the value shown in the harness (not on the phone screen).
+
+**15.3 What must actually adapt.**
+- LVGL display size + draw buffers sized from the geometry (no fixed 307 KB assumptions).
+- The stable frame: status bar height, softkey bar height and the content area derived from tokens;
+  decide and document whether the chrome heights are fixed px or proportional.
+- Page layout: row heights, column widths, the category strip, the menu grid and carousel all
+  recompute. Text may wrap or clip differently — that is expected and acceptable.
+- The bezel mock in the host window scales to the panel; the browser viewport sends the new size and
+  the page rescales its canvas.
+- Shot mode takes a geometry argument so golden frames can be produced per resolution.
+
+**15.4 The standard this stage is held to — deliberately lower.**
+"Attempts to render, legibly, without crashing or drawing outside the panel." Not pixel-perfect,
+not beautiful at every size. Once a real panel is chosen we go back and tune against that one.
+
+**15.5 Why it is worth the effort.**
+It forces the constants out of the layout while the code is still small, and it makes the screen
+choice a data point we can look at instead of a guess. It is also the cheapest possible time to do
+it: after §14 there will be far more layout code to unpick.

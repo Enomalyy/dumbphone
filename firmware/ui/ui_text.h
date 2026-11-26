@@ -16,8 +16,8 @@
  *
  * This module owns the decision, not the glyphs: the shell loads a Hebrew
  * and a monochrome-emoji fallback per text size and chains them behind the
- * pixel faces, so only missing code points ever leave Silkscreen/VT323
- * (ui_architecture.md §5, fonts README).
+ * primary faces, so only missing code points ever leave Silkscreen/VT323/
+ * Pixelify Sans (ui-architecture.md §5, fonts README).
  */
 #pragma once
 

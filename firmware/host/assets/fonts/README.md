@@ -2,7 +2,9 @@
 
 Downloaded once and committed so the simulator renders identically offline.
 All five faces are free-licensed; the two data-script faces are fallbacks, not
-primary UI fonts (see "Fallback chain" below).
+primary UI fonts (see "Fallback chain" below). The small body face is **not**
+a TTF here — it is baked to a bitmap C file (`firmware/ui/font_pixelify_m.c`,
+see "Baked Pixelify Sans" below).
 
 | File | Source | License | Bytes |
 |---|---|---|---|
@@ -26,17 +28,41 @@ escapes, in `ui/ui_icons.h` (the renderer keeps its three private chevron/
 caret glyphs in `ui/ui_menu.c`); the authoritative name→codepoint table is
 `metadata/icons.json` in the Font Awesome repository (6.5.2).
 
+## Baked Pixelify Sans (small body face)
+
+The preview / conversational text (`UI_FONT_BODY_M_PX`, 16 px) is **Pixelify
+Sans** baked to an LVGL bitmap font — `firmware/ui/font_pixelify_m.c`
+(64,661 B source, ~40 KiB rodata). Eliyahu's call, 26/11: Pixelify for the
+small letters, VT323 (TTF) kept for the big ones. 8-bit depth: 1-bit looked
+too muddy on the dark palette, 8-bit reads clean while keeping the pixel
+look. The large body face (`UI_FONT_BODY_L_PX`, 24 px) stays VT323 as a TTF.
+
+Source: Pixelify Sans OFL 1.1 (https://fonts.google.com/specimen/Pixelify+Sans),
+static weight 400, subset to printable ASCII (U+0020..U+007E). Exact recipe:
+
+```sh
+fonttools varLib.instancer PixelifySans-wght.ttf wght=400 -o PixelifySans-400.ttf
+npx lv_font_conv --font PixelifySans-400.ttf --size 16 --bpp 8 --no-compress \
+  --format lvgl -r 32-126 -o font_pixelify_m.c
+```
+
+`--no-compress` matters: compressed (RLE) output needs `LV_USE_FONT_COMPRESSED`
+in `lv_conf.h`, which we do not enable. The generated descriptor is const
+rodata; `ui_shell_init()` chains the fallbacks onto a mutable shallow copy
+(`firmware/ui/font_pixelify.h` documents why).
+
 ## Fallback chain (Latin stays pixel-styled)
 
 `ui_shell_init()` loads one Hebrew instance and one emoji instance **per text
 size** (13, 16, 18, 22, 24 px today) and chains them:
 
 ```
-Silkscreen / VT323 / FA  ->  Droid Sans Hebrew @same px  ->  Noto Emoji @same px
+Silkscreen / VT323 / FA / Pixelify  ->  Droid Sans Hebrew @same px  ->  Noto Emoji @same px
 ```
 
 LVGL resolves a glyph through `lv_font_t.fallback` only when the base face
-reports it missing, so ASCII/Latin never leaves Silkscreen or VT323. The
+reports it missing, so ASCII/Latin never leaves Silkscreen, VT323 or Pixelify.
+The
 chain is attached to every UI face; the two Font Awesome faces never carry
 data text, but the uniform chain costs nothing per glyph. What each fallback
 instance *does* cost is one tiny_ttf glyph cache

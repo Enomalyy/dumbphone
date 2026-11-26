@@ -113,13 +113,14 @@ extern "C" {
 #define UI_FONT_CHROME_S_PX  13   /* Silkscreen: tabs, row meta values  */
 #define UI_FONT_TITLE_PX     24   /* Silkscreen: page / category title  */
 #define UI_FONT_BODY_L_PX    24   /* VT323: primary list text           */
-#define UI_FONT_BODY_M_PX    18   /* VT323: preview / secondary text    */
+#define UI_FONT_BODY_M_PX    16   /* Pixelify Sans 8bpp: preview/second.*/
 #define UI_FONT_ICON_PX      22   /* Font Awesome: icons                */
 #define UI_FONT_ICON_S_PX    13   /* Font Awesome: carets/chevrons      */
 
 /* Fallback faces for every text size (ui_text.h decides direction; the
  * shell loads these and chains them behind the pixel faces, so Latin never
- * leaves Silkscreen/VT323). Hebrew: Droid Sans Hebrew (Apache-2.0, 30,024 B).
+ * leaves Silkscreen/VT323/Pixelify Sans). Hebrew: Droid Sans Hebrew
+ * (Apache-2.0, 30,024 B).
  * Emoji: monochrome Noto Emoji subset (OFL, 753,788 B) - see the fonts README
  * for the subsetting recipe and the S3 flash note. */
 #define UI_FONT_HEBREW_FILE  "DroidSansHebrew-Regular.ttf"
@@ -156,8 +157,8 @@ const ui_palette_t *ui_palette(void);
 lv_font_t *ui_font_chrome(void);    /* Silkscreen 16 — status bar, soft keys */
 lv_font_t *ui_font_chrome_s(void);  /* Silkscreen 13 — category tabs         */
 lv_font_t *ui_font_title(void);     /* Silkscreen 24 — page titles           */
-lv_font_t *ui_font_body_l(void);    /* VT323 24 — primary list text          */
-lv_font_t *ui_font_body_m(void);    /* VT323 18 — preview / secondary        */
+lv_font_t *ui_font_body_l(void);    /* VT323 24 — primary list text           */
+lv_font_t *ui_font_body_m(void);    /* Pixelify Sans 8bpp 16 — preview/second.*/
 lv_font_t *ui_font_icon(void);      /* Font Awesome solid 22                 */
 lv_font_t *ui_font_icon_s(void);    /* Font Awesome solid 13 (carets)        */
 

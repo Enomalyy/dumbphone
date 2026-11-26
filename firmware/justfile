@@ -56,6 +56,15 @@ build-desktop-stats: vendor
 run-desktop: build-desktop
     ./build-host/dumbphone-desktop
 
+# ---- Web target (WebAssembly, GitHub Pages) -------------------------------
+#
+# Compiles the SAME ui/ tree to WebAssembly via Emscripten (user-space SDK at
+# ~/dev-deps/emsdk — see web/README.md for install steps). Single-threaded:
+# GitHub Pages cannot set COOP/COEP, so -pthread is off the table. Output is
+# web/dist/, a self-contained static site; publish it with web/deploy.sh.
+build-web:
+    ../web/build.sh
+
 # Harness target: headless PANEL frame (320x480 device pixels) for golden diffs.
 # Shot mode freezes the clock at 20:36, so frames are reproducible at any time.
 # screens: chat|menu|settings|speeddials|heldpress|callhist|contacts|stub|lock.
