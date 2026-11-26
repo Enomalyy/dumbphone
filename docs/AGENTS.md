@@ -57,7 +57,8 @@ Status (26/11): concept phase + **Phase 1 harness** (ESP-IDF v5.5.6, QEMU boots 
   `LOCK ↦ HOME ↦ menu ↦ category ↦ page` — END returns to HOME from anywhere, END×2 on HOME locks.
   Every list page is a `menu_t` on one renderer; all shared metrics and
   font sizes are tokens in `ui/ui_theme.h`. Spec §12 (HOME split + softkey legend) is BUILT.
-  Run it: `just run-desktop` (window + tailnet browser viewport) · `just shot-desktop <screen>`
+  Run it: `just run-desktop` (window + browser viewport on 127.0.0.1:8099 — reach it from the
+  tablet with `DUMBPHONE_SERVER_BIND=0.0.0.0 just run-desktop`) · `just shot-desktop <screen>`
   (golden frame, clock frozen) · `just build-s3`.
   Next: the out-of-scope follow-ups recorded in `relay/menu-rebuild/status.md` — PIN entry, real
   WAHA-backed content (spec §9), settings persistence, and wiring `ui/` + LVGL into the S3 build
