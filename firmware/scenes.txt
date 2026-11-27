@@ -118,6 +118,7 @@ menu-amber              panel --screen menu --theme amber
 # The MONO and SLATE palettes in situ on the rows page, same recipe as
 # menu-light/menu-amber — neither had a golden scene before.
 menu-mono               panel --screen menu --theme mono
+menu-slate              panel --screen menu --theme slate
 options-exec            panel --screen chat --key shoulder-l --key ok
 # §14.3: the one cycling Menu Style row, shown at its third value
 # (Display page: select Menu Style, activate twice from the CAROUSEL
