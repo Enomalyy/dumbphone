@@ -1,11 +1,13 @@
 /*
  * ui_options.c — the per-page options tables behind the SHOULDER-L sidebar.
  *
- * Pages are data (spec §4): each screen id maps to a small const table of
- * opt_entry_t rows. Every listed option is an action that WORKS in the
- * current UI state — opening a real page, or switching the main-menu view
- * (the two renderings of the same menu_t data). Nothing here is inert: the
- * sidebar shows only options relevant to the page it overlays.
+ * Pages are data (spec §4): each page owns a small const table of
+ * opt_entry_t rows, exposed through one accessor per page. Every listed
+ * option is an action that WORKS in the current UI state — opening a real
+ * page, or switching the main-menu view (the two renderings of the same
+ * menu_t data). Nothing here is inert: the sidebar shows only options
+ * relevant to the page it overlays. The page registry (ui_shell.c) wires
+ * each page's `options` field to its accessor (spec §16.3).
  */
 
 #include <stddef.h>
@@ -76,21 +78,17 @@ static const opt_entry_t opts_stub[] = {
     { "Main Menu", I_ELLIPSIS, OPT_ACTION_MAIN_MENU, PAGE_NONE },
 };
 
-const opt_entry_t *ui_options_for(ui_screen_id_t screen, int *n)
-{
-    switch (screen) {
-    case UI_SCREEN_HOME:       *n = 3; return opts_home;
-    case UI_SCREEN_CHATLIST:   *n = 3; return opts_messaging;
-    case UI_SCREEN_MENU:       *n = 3; return opts_menu;
-    case UI_SCREEN_SETTINGS:   *n = 2; return opts_settings;
-    case UI_SCREEN_DISPLAY:    *n = 2; return opts_display;
-    case UI_SCREEN_FONT:       *n = 2; return opts_font;
-    case UI_SCREEN_SPEEDDIALS: *n = 1; return opts_speeddial;
-    case UI_SCREEN_HELDPRESS:  *n = 1; return opts_heldpress;
-    case UI_SCREEN_CALLHIST:   *n = 2; return opts_callhist;
-    case UI_SCREEN_CONTACTS:   *n = 1; return opts_contacts;
-    case UI_SCREEN_STUB:       *n = 1; return opts_stub;
-    case UI_SCREEN_LOCK:       *n = 0; return NULL;        /* locked: no options */
-    default:                   *n = 0; return NULL;        /* unknown screen */
-    }
-}
+/* One accessor per page — the lock screen has no options: locked is a
+ * state, not a page with actions. */
+const opt_entry_t *ui_opts_home(int *n)      { *n = 3; return opts_home; }
+const opt_entry_t *ui_opts_chatlist(int *n)  { *n = 3; return opts_messaging; }
+const opt_entry_t *ui_opts_menu(int *n)      { *n = 3; return opts_menu; }
+const opt_entry_t *ui_opts_settings(int *n)  { *n = 2; return opts_settings; }
+const opt_entry_t *ui_opts_display(int *n)   { *n = 2; return opts_display; }
+const opt_entry_t *ui_opts_font(int *n)      { *n = 2; return opts_font; }
+const opt_entry_t *ui_opts_speeddial(int *n) { *n = 1; return opts_speeddial; }
+const opt_entry_t *ui_opts_heldpress(int *n) { *n = 1; return opts_heldpress; }
+const opt_entry_t *ui_opts_callhist(int *n)  { *n = 2; return opts_callhist; }
+const opt_entry_t *ui_opts_contacts(int *n)  { *n = 1; return opts_contacts; }
+const opt_entry_t *ui_opts_stub(int *n)      { *n = 1; return opts_stub; }
+const opt_entry_t *ui_opts_lock(int *n)      { *n = 0; return NULL; }

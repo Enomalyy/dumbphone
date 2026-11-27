@@ -15,6 +15,7 @@
  */
 
 #include "ui/ui_menu.h"
+#include "ui/ui_pages.h"
 #include "ui/ui_text.h"
 #include "ui/ui_theme.h"
 
@@ -65,12 +66,13 @@
 #define GLYPH_CHEV_L  u8"\uF100"   /* << chevrons-left             */
 #define GLYPH_CHEV_R  u8"\uF101"   /* >> chevrons-right            */
 
-/* The static pool of rendered list pages — one slot per page the app can
- * hold: chat list, main menu, settings tree, speed-dial sub-page, held-press
- * sub-page, call history, contacts. Pages are built once at startup and live
- * for the process's lifetime, so this is the whole app's page budget: adding
- * a page means raising this number AND building it in ui_shell_init(). */
-#define LIST_POOL 9
+/* The static pool of rendered list pages — sized from the page registry
+ * (ui_pages.h), not counted by hand: a page that is not in the table cannot
+ * be reached, so the pool can never be under-counted (spec §16.3). Non-list
+ * pages (HOME, stub, lock) don't take slots; the spare capacity is deliberate
+ * headroom. Pages are built once at startup and live for the process's
+ * lifetime — this is the whole app's page budget. */
+#define LIST_POOL UI_PAGE_COUNT
 
 struct ui_list_page {
     menu_t   *m;
@@ -477,7 +479,7 @@ static void rebuild_rows(list_page_t *p)
 list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
 {
     if (g_pool_n >= LIST_POOL) {
-        printf("ui_menu: page pool full (LIST_POOL=%d) — raise it\n", LIST_POOL);
+        printf("ui_menu: page pool full (LIST_POOL=%d)\n", LIST_POOL);
         return NULL;
     }
     /* The row and tray arrays below are compile-time sizes. Clamp the page's

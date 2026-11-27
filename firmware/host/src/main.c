@@ -21,8 +21,9 @@
  * at 20:36 so a frame is reproducible regardless of when it was taken):
  *   dumbphone-desktop --shot out.ppm        panel only (device pixels)
  *   dumbphone-desktop --shot-win out.ppm    composed mock-up (bezel + panel)
- *   options: --screen home|chat|menu|settings|speeddials|heldpress|callhist
- *            |contacts|lock
+ *   options: --screen <name>     one of the page registry's names (ui_pages.h):
+ *            home chat menu settings display font speeddials heldpress
+ *            callhist contacts stub lock
  *            --press <button-id>
  *            --cycle left|right N  --key <name> [N]  --activate N
  *            --swipe up|down|left|right [dist]  --tap x y  --hold <ms>
@@ -52,6 +53,7 @@
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
 #include "ui/ui_geometry.h"
+#include "ui/ui_pages.h"
 #include "ui/ui_settings.h"
 #include "ui/ui_shell.h"
 #include "ui/ui_theme.h"
@@ -349,8 +351,7 @@ int main(int argc, char **argv)
         } else {
             fprintf(stderr,
                     "usage: %s [--shot out.ppm] [--shot-win out.ppm] "
-                    "[--screen home|chat|menu|settings|speeddials|heldpress"
-                    "|callhist|contacts|lock] "
+                    "[--screen <page name from the page registry>] "
                     "[--press <button-id>] [--cycle left|right N] "
                     "[--key <name> [N] ...] [--activate N] "
                     "[--swipe up|down|left|right [dist] ...] [--tap x y ...] "
@@ -476,35 +477,21 @@ int main(int argc, char **argv)
     if (shot_path || shot_win_path) {
         settle(frames);
 
-        if (screen && !strcmp(screen, "home")) {
-            ui_shell_request_screen(UI_SCREEN_HOME);   /* the home screen */
-            settle(10);
-        } else if (screen && !strcmp(screen, "chat")) {
-            ui_shell_request_screen(UI_SCREEN_CHATLIST);   /* Messaging */
-            settle(10);
-        } else if (screen && !strcmp(screen, "menu")) {
-            ui_shell_request_screen(UI_SCREEN_MENU);
-            settle(10);
-        } else if (screen && !strcmp(screen, "settings")) {
-            ui_shell_request_screen(UI_SCREEN_SETTINGS);
-            settle(10);
-        } else if (screen && !strcmp(screen, "speeddials")) {
-            ui_shell_request_screen(UI_SCREEN_SPEEDDIALS);
-            settle(10);
-        } else if (screen && !strcmp(screen, "heldpress")) {
-            ui_shell_request_screen(UI_SCREEN_HELDPRESS);
-            settle(10);
-        } else if (screen && !strcmp(screen, "callhist")) {
-            ui_shell_request_screen(UI_SCREEN_CALLHIST);
-            settle(10);
-        } else if (screen && !strcmp(screen, "contacts")) {
-            ui_shell_request_screen(UI_SCREEN_CONTACTS);
-            settle(10);
-        } else if (screen && !strcmp(screen, "stub")) {
-            ui_shell_request_stub(PAGE_CALL_HISTORY);   /* representative leaf */
-            settle(10);
-        } else if (screen && !strcmp(screen, "lock")) {
-            ui_shell_request_screen(UI_SCREEN_LOCK);    /* the lock screen */
+        if (screen) {
+            /* The page registry (spec §16.3) is the single source of the
+             * --screen names: one lookup, no strcmp chain. "stub" stays a
+             * named special case — it pushes a representative leaf TITLED
+             * "Call History", not a bare screen swap. */
+            const ui_page_t *pg = ui_page_by_name(screen);
+            if (!pg) {
+                fprintf(stderr, "[main] unknown --screen '%s'\n", screen);
+                return 2;
+            }
+            if (pg->screen == UI_SCREEN_STUB) {
+                ui_shell_request_stub(PAGE_CALL_HISTORY);
+            } else {
+                ui_shell_request_screen(pg->screen);
+            }
             settle(10);
         }
         if (cycle_n > 0 && cycle_dir) {

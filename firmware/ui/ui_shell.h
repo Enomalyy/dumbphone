@@ -41,6 +41,7 @@ typedef enum {
     UI_SCREEN_CONTACTS,      /* Calls: contacts list (spec §2)                   */
     UI_SCREEN_STUB,          /* generic leaf page (title + "coming soon")       */
     UI_SCREEN_LOCK,          /* lock screen: keypad unlocks (spec §1)           */
+    UI_SCREEN_COUNT          /* not a screen — bound for coverage checks        */
 } ui_screen_id_t;
 
 /* Initialize LVGL, fonts, and both screens. Must run on the UI thread, after

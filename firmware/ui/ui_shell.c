@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>   /* atexit(), UI_FLUSH_STATS builds only */
+#include <string.h>
 #include <time.h>
 
 #include "lvgl.h"
@@ -32,6 +33,7 @@
 #include "font_pixelify.h"
 #include "ui_keymap.h"
 #include "ui_menu.h"
+#include "ui_pages.h"
 #include "ui_home.h"
 #include "ui_messaging.h"
 #include "ui_input.h"
@@ -105,7 +107,6 @@ static bool g_startup_theme_set = false;
 
 static lv_obj_t *scr_root;      /* the persistent root screen (the frame)  */
 static lv_obj_t *content_area;  /* swaps screens; the frame around it is fixed */
-static lv_obj_t *scr_menu;
 static lv_obj_t *lbl_clock;
 
 /* Screen stack. HOME is the base: END returns here from anywhere, and a
@@ -293,23 +294,14 @@ static void clock_tick_cb(lv_timer_t *timer)
 /* END = home from anywhere. Unbound slots are ACT_NOOP.                */
 /* ------------------------------------------------------------------ */
 
+/* The current page's contextual keys — one lookup in the page registry
+ * (spec §16.3), not a switch over screens. A screen id that is not a page
+ * (only possible for callers outside the harness) falls back to HOME's keys,
+ * as the old default case did. */
 static const keymap_t *page_keymap(void)
 {
-    switch (screen_stack[stack_top]) {
-    case UI_SCREEN_MENU:       return ui_mainmenu_keymap();
-    case UI_SCREEN_SETTINGS:   return &ui_settings_page()->keys;
-    case UI_SCREEN_DISPLAY:    return &ui_settings_display_page()->keys;
-    case UI_SCREEN_FONT:       return &ui_settings_font_page()->keys;
-    case UI_SCREEN_SPEEDDIALS: return &ui_speeddial_page()->keys;
-    case UI_SCREEN_HELDPRESS:  return &ui_heldpress_page()->keys;
-    case UI_SCREEN_CALLHIST:   return &ui_calls_history_page()->keys;
-    case UI_SCREEN_CONTACTS:   return &ui_calls_contacts_page()->keys;
-    case UI_SCREEN_CHATLIST:   return ui_messaging_keymap();
-    case UI_SCREEN_STUB:       return ui_leaf_stub_keymap();
-    case UI_SCREEN_LOCK:       return ui_leaf_lock_keymap();
-    case UI_SCREEN_HOME:
-    default:                   return ui_home_keymap();
-    }
+    const ui_page_t *pg = ui_page_for_screen(screen_stack[stack_top]);
+    return pg ? pg->keymap() : ui_home_keymap();
 }
 
 static void go_home(void)
@@ -387,18 +379,20 @@ static bool is_locked(void)
     return screen_stack[stack_top] == UI_SCREEN_LOCK;
 }
 
-/* The shell's page handles. Every page is a canonical menu_t rendered by
- * ui_menu.c; the DATA for each lives in its own module (ui_messaging for the
- * chat list, ui_mainmenu for the menu, and one small module per settings/
- * calls page). The shell only owns these pointers and the screen stack. */
-static list_page_t *g_menu = NULL;
-static list_page_t *g_settings = NULL;
-static list_page_t *g_display = NULL;
-static list_page_t *g_font = NULL;
-static list_page_t *g_speeddial = NULL;
-static list_page_t *g_heldpress = NULL;
-static list_page_t *g_callhist = NULL;
-static list_page_t *g_contacts = NULL;
+/* One slot per registry row (ui_pages[] below): the built root object and,
+ * for list pages, the renderer's page handle. Indexed by row position — the
+ * ROW_* constants keep the table order honest, and the boot self-check
+ * catches a drift. */
+static lv_obj_t    *page_roots[UI_PAGE_COUNT];
+static list_page_t *page_lists[UI_PAGE_COUNT];
+
+/* Row positions in ui_pages[] (one row per screen — see pages_selfcheck). */
+enum {
+    ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_SETTINGS, ROW_DISPLAY,
+    ROW_FONT, ROW_SPEEDDIALS, ROW_HELDPRESS, ROW_CALLHIST, ROW_CONTACTS,
+    ROW_STUB, ROW_LOCK,
+};
+_Static_assert(ROW_LOCK + 1 == UI_SCREEN_COUNT, "one registry row per screen");
 
 /* Forward decls: the input entry point (the soft-key bar re-enters it) and
  * the leaf-page openers, all defined further down. */
@@ -430,89 +424,24 @@ static void list_activate_cb(list_page_t *p, int idx)
     activate();
 }
 
-/* CENTER: page-dependent meaning. HOME -> MAIN MENU; MENU -> open item;
- * SETTINGS -> toggle the selected setting and redraw its value, or open the
- * sub-page a row targets (Speed Dials / Held Presses); SPEEDDIALS -> cycle
- * the selected slot; HELDPRESS -> cycle the selected key's preset.
- * Called by CENTER, by the sidebar's execute, and by a row tap
- * (list_activate_cb) — it reads each page's own selection, so all three
- * callers act on the same row. */
+/* CENTER: page-dependent meaning — the current row's activate callback
+ * (spec §16.3). Called by CENTER, by the sidebar's execute, and by a row tap
+ * (list_activate_cb); each callback reads its own page's selection, so all
+ * three callers act on the same row. */
 static void activate(void)
 {
-    if (screen_stack[stack_top] == UI_SCREEN_HOME) {
-        push_screen(UI_SCREEN_MENU);
-    } else if (screen_stack[stack_top] == UI_SCREEN_MENU) {
-        /* A SETTINGS-category item names the settings row it stands for;
-         * land on that row (read before open_page() changes screens). */
-        int row = ui_mainmenu_selected_setting();
-        page_id_t t = ui_list_selected_target(g_menu);
-        open_page(t);
-        if (t == PAGE_SETTINGS && row >= 0) {
-            ui_list_select(g_settings, row);
-        }
-    } else if (screen_stack[stack_top] == UI_SCREEN_SETTINGS) {
-        page_id_t t = ui_list_selected_target(g_settings);
-        if (t == PAGE_NONE) {
-            ui_settings_activate(ui_list_sel(g_settings));
-            ui_list_refresh(g_settings);
-        } else {
-            open_page(t);   /* navigable row (a config sub-page) */
-        }
-    } else if (screen_stack[stack_top] == UI_SCREEN_DISPLAY) {
-        page_id_t t = ui_list_selected_target(g_display);
-        if (t == PAGE_NONE) {
-            ui_setting_effect_t fx =
-                ui_settings_display_activate(ui_list_sel(g_display));
-            ui_list_refresh(g_display);
-            if (fx == UI_SETTING_EFFECT_MENU_STYLE) {
-                ui_mainmenu_sync_layout();   /* the menu view changed */
-            } else if (fx == UI_SETTING_EFFECT_SOFTKEYS) {
-                relayout_all();              /* content area changed  */
-            }
-        } else {
-            open_page(t);
-        }
-    } else if (screen_stack[stack_top] == UI_SCREEN_FONT) {
-        ui_settings_font_activate(ui_list_sel(g_font));
-        ui_list_refresh(g_font);
-    } else if (screen_stack[stack_top] == UI_SCREEN_SPEEDDIALS) {
-        ui_speeddial_cycle(ui_list_sel(g_speeddial));
-        ui_list_refresh(g_speeddial);
-    } else if (screen_stack[stack_top] == UI_SCREEN_HELDPRESS) {
-        ui_heldpress_cycle(ui_list_sel(g_heldpress));
-        ui_list_refresh(g_heldpress);
-    } else if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-        /* The conversation page is a later leg: for now a stub titled with
-         * the chat name — the same wiring bar as a speed dial's call screen
-         * (the keymap already promised CENTER opens the selected chat). */
-        const char *name = ui_list_selected_label(ui_messaging_page());
-        if (name) {
-            ui_leaf_set_stub_title(name);
-            push_screen(UI_SCREEN_STUB);
-        }
+    const ui_page_t *pg = ui_page_for_screen(screen_stack[stack_top]);
+    if (pg && pg->activate) {
+        pg->activate();
     }
 }
 
 static void move_selection(int step)
 {
-    if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-        ui_list_move_sel(ui_messaging_page(), step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_MENU) {
-        ui_list_move_sel(g_menu, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_SETTINGS) {
-        ui_list_move_sel(g_settings, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_DISPLAY) {
-        ui_list_move_sel(g_display, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_FONT) {
-        ui_list_move_sel(g_font, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_SPEEDDIALS) {
-        ui_list_move_sel(g_speeddial, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_HELDPRESS) {
-        ui_list_move_sel(g_heldpress, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_CALLHIST) {
-        ui_list_move_sel(g_callhist, step);
-    } else if (screen_stack[stack_top] == UI_SCREEN_CONTACTS) {
-        ui_list_move_sel(g_contacts, step);
+    const ui_page_t *pg = ui_page_for_screen(screen_stack[stack_top]);
+    list_page_t *p = pg ? page_lists[pg - ui_pages] : NULL;
+    if (p) {
+        ui_list_move_sel(p, step);
     }
 }
 
@@ -542,19 +471,13 @@ static void do_action(action_t a, hal_key_t key)
         }
         break;
     case ACT_CYCLE_CAT_PREV:
-        if (screen_stack[stack_top] == UI_SCREEN_MENU) {
-            ui_mainmenu_cycle_cat(-1);
-        } else if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-            ui_messaging_cycle_cat(-1);
+    case ACT_CYCLE_CAT_NEXT: {
+        const ui_page_t *pg = ui_page_for_screen(screen_stack[stack_top]);
+        if (pg && pg->cycle) {
+            pg->cycle(a == ACT_CYCLE_CAT_NEXT ? 1 : -1);
         }
         break;
-    case ACT_CYCLE_CAT_NEXT:
-        if (screen_stack[stack_top] == UI_SCREEN_MENU) {
-            ui_mainmenu_cycle_cat(1);
-        } else if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
-            ui_messaging_cycle_cat(1);
-        }
-        break;
+    }
     case ACT_CALL_APP:
         /* CALL from HOME goes straight to the Calls page (spec §2): the
          * call-history list. The CALLS category stays reachable via the
@@ -656,50 +579,310 @@ static void build_softkey_bar(lv_obj_t *parent)
 
 
 /* ------------------------------------------------------------------ */
-/* Settings tree — a canonical list page over ui_settings' menu_t.     */
-/* Rows carry their live value in `meta`; CENTER flips two-state rows  */
-/* (the shell refreshes the rows via ui_list_refresh).                */
+/* The page registry (ui-architecture.md §16.3)                       */
+/*                                                                    */
+/* One row per page: the harness --screen name, both id enums, and the */
+/* callbacks the shell needs to show / keymap / activate / move /      */
+/* swipe / option a page. Every dispatch in this file is a loop over   */
+/* the table — adding a page is writing its module and adding one row */
+/* (spec §10). The renderer's list pool is sized from the table's     */
+/* length, so a page not in the table cannot be reached and the pool */
+/* cannot be under-counted.                                           */
+/*                                                                    */
+/* The table order matters: CHATLIST builds first, because the menu's  */
+/* unread badge reads the chat list.                                  */
 /* ------------------------------------------------------------------ */
 
-static void build_settings_screen(void)
+#define ARRAY_LEN(a) ((int)(sizeof(a) / sizeof((a)[0])))
+
+/* Build wrappers — each builds its page under the content area and,
+ * for list pages, records the renderer's handle in the parallel state. */
+static lv_obj_t *page_chatlist_build(void)
 {
-    g_settings = ui_list_build(content_area, ui_settings_page());
+    list_page_t *p = ui_messaging_build(content_area);
+    page_lists[ROW_CHATLIST] = p;
+    return p ? ui_list_root(p) : NULL;
+}
+
+static lv_obj_t *page_home_build(void)
+{
+    return ui_home_build(content_area);
+}
+
+static lv_obj_t *page_menu_build(void)
+{
+    list_page_t *p = ui_mainmenu_build(content_area);
+    page_lists[ROW_MENU] = p;
+    return p ? ui_list_root(p) : NULL;
+}
+
+/* Settings tree — a canonical list page over ui_settings' menu_t. Rows
+ * carry their live value in `meta`; CENTER flips two-state rows (the shell
+ * refreshes the rows via ui_list_refresh). */
+static lv_obj_t *page_settings_build(void)
+{
+    list_page_t *p = ui_list_build(content_area, ui_settings_page());
+    page_lists[ROW_SETTINGS] = p;
+    return p ? ui_list_root(p) : NULL;
 }
 
 /* Settings > Display — theme / font / menu style / softkey bar (spec §14). */
-static void build_display_screen(void)
+static lv_obj_t *page_display_build(void)
 {
-    g_display = ui_list_build(content_area, ui_settings_display_page());
+    list_page_t *p = ui_list_build(content_area, ui_settings_display_page());
+    page_lists[ROW_DISPLAY] = p;
+    return p ? ui_list_root(p) : NULL;
 }
 
 /* Settings > Display > Font — headers / text / subtext (spec §14.12). */
-static void build_font_screen(void)
+static lv_obj_t *page_font_build(void)
 {
-    g_font = ui_list_build(content_area, ui_settings_font_page());
+    list_page_t *p = ui_list_build(content_area, ui_settings_font_page());
+    page_lists[ROW_FONT] = p;
+    return p ? ui_list_root(p) : NULL;
 }
 
 /* Speed-dial sub-page — a canonical list page over ui_speeddial's menu_t. */
-static void build_speeddial_screen(void)
+static lv_obj_t *page_speeddial_build(void)
 {
-    g_speeddial = ui_list_build(content_area, ui_speeddial_page());
+    list_page_t *p = ui_list_build(content_area, ui_speeddial_page());
+    page_lists[ROW_SPEEDDIALS] = p;
+    return p ? ui_list_root(p) : NULL;
 }
 
 /* Held-press sub-page — a canonical list page over ui_heldpress' menu_t. */
-static void build_heldpress_screen(void)
+static lv_obj_t *page_heldpress_build(void)
 {
-    g_heldpress = ui_list_build(content_area, ui_heldpress_page());
+    list_page_t *p = ui_list_build(content_area, ui_heldpress_page());
+    page_lists[ROW_HELDPRESS] = p;
+    return p ? ui_list_root(p) : NULL;
 }
 
 /* Call History — a canonical list page over ui_calls' menu_t (spec §2). */
-static void build_callhist_screen(void)
+static lv_obj_t *page_callhist_build(void)
 {
-    g_callhist = ui_list_build(content_area, ui_calls_history_page());
+    list_page_t *p = ui_list_build(content_area, ui_calls_history_page());
+    page_lists[ROW_CALLHIST] = p;
+    return p ? ui_list_root(p) : NULL;
 }
 
 /* Contacts — a canonical list page over ui_calls' menu_t (spec §2). */
-static void build_contacts_screen(void)
+static lv_obj_t *page_contacts_build(void)
 {
-    g_contacts = ui_list_build(content_area, ui_calls_contacts_page());
+    list_page_t *p = ui_list_build(content_area, ui_calls_contacts_page());
+    page_lists[ROW_CONTACTS] = p;
+    return p ? ui_list_root(p) : NULL;
+}
+
+/* The stub page's content lives in ui_leaf.c; the push is navigation, so it
+ * stays in a keymap/activate callback. */
+static lv_obj_t *page_stub_build(void)
+{
+    ui_leaf_build_stub(content_area);
+    return ui_leaf_stub_root();
+}
+
+static lv_obj_t *page_lock_build(void)
+{
+    ui_leaf_build_lock(content_area);
+    return ui_leaf_lock_root();
+}
+
+/* Keymap wrappers — the list pages own their keymap inside their menu_t. */
+static const keymap_t *page_settings_keymap(void)  { return &ui_settings_page()->keys; }
+static const keymap_t *page_display_keymap(void)   { return &ui_settings_display_page()->keys; }
+static const keymap_t *page_font_keymap(void)      { return &ui_settings_font_page()->keys; }
+static const keymap_t *page_speeddial_keymap(void) { return &ui_speeddial_page()->keys; }
+static const keymap_t *page_heldpress_keymap(void) { return &ui_heldpress_page()->keys; }
+static const keymap_t *page_callhist_keymap(void)  { return &ui_calls_history_page()->keys; }
+static const keymap_t *page_contacts_keymap(void)  { return &ui_calls_contacts_page()->keys; }
+
+/* Activate callbacks — what CENTER / a row tap means on each page. Each
+ * reads its own page's selection, so every caller (CENTER, the sidebar's
+ * execute, a tap) acts on the same row. */
+static void page_home_activate(void)
+{
+    push_screen(UI_SCREEN_MENU);
+}
+
+static void page_chatlist_activate(void)
+{
+    /* The conversation page is a later leg: for now a stub titled with the
+     * chat name — the same wiring bar as a speed dial's call screen (the
+     * keymap already promised CENTER opens the selected chat). */
+    const char *name = ui_list_selected_label(page_lists[ROW_CHATLIST]);
+    if (name) {
+        ui_leaf_set_stub_title(name);
+        push_screen(UI_SCREEN_STUB);
+    }
+}
+
+static void page_menu_activate(void)
+{
+    /* A SETTINGS-category item names the settings row it stands for; land
+     * on that row (read before open_page() changes screens). */
+    int row = ui_mainmenu_selected_setting();
+    page_id_t t = ui_list_selected_target(page_lists[ROW_MENU]);
+    open_page(t);
+    if (t == PAGE_SETTINGS && row >= 0) {
+        ui_list_select(page_lists[ROW_SETTINGS], row);
+    }
+}
+
+static void page_settings_activate(void)
+{
+    list_page_t *p = page_lists[ROW_SETTINGS];
+    page_id_t t = ui_list_selected_target(p);
+    if (t == PAGE_NONE) {
+        ui_settings_activate(ui_list_sel(p));
+        ui_list_refresh(p);
+    } else {
+        open_page(t);   /* navigable row (a config sub-page) */
+    }
+}
+
+static void page_display_activate(void)
+{
+    list_page_t *p = page_lists[ROW_DISPLAY];
+    page_id_t t = ui_list_selected_target(p);
+    if (t == PAGE_NONE) {
+        ui_setting_effect_t fx = ui_settings_display_activate(ui_list_sel(p));
+        ui_list_refresh(p);
+        if (fx == UI_SETTING_EFFECT_MENU_STYLE) {
+            ui_mainmenu_sync_layout();   /* the menu view changed */
+        } else if (fx == UI_SETTING_EFFECT_SOFTKEYS) {
+            relayout_all();              /* content area changed  */
+        }
+    } else {
+        open_page(t);
+    }
+}
+
+static void page_font_activate(void)
+{
+    list_page_t *p = page_lists[ROW_FONT];
+    ui_settings_font_activate(ui_list_sel(p));
+    ui_list_refresh(p);
+}
+
+static void page_speeddial_activate(void)
+{
+    list_page_t *p = page_lists[ROW_SPEEDDIALS];
+    ui_speeddial_cycle(ui_list_sel(p));
+    ui_list_refresh(p);
+}
+
+static void page_heldpress_activate(void)
+{
+    list_page_t *p = page_lists[ROW_HELDPRESS];
+    ui_heldpress_cycle(ui_list_sel(p));
+    ui_list_refresh(p);
+}
+
+/* Category-strip cycling (the d-pad L/R and the horizontal swipe both land
+ * here). */
+static void page_menu_cycle(int dir)     { ui_mainmenu_cycle_cat(dir); }
+static void page_chatlist_cycle(int dir) { ui_messaging_cycle_cat(dir); }
+
+/* The menu's layout (carousel vs grid) is synced each time the menu is
+ * shown — the old show_screen() special case, now a row field. */
+static void page_menu_on_show(void) { ui_mainmenu_sync_layout(); }
+
+/* THE table. Order: CHATLIST first (build dependency), then the rest in
+ * screen-enum order. */
+const ui_page_t ui_pages[] = {
+    /* name         id               screen            build                keymap                activate                 cycle                  options              on_show             */
+    { "chat",       PAGE_CHATLIST,   UI_SCREEN_CHATLIST, page_chatlist_build, ui_messaging_keymap,  page_chatlist_activate,   page_chatlist_cycle,    ui_opts_chatlist,     NULL },
+    { "home",       PAGE_NONE,       UI_SCREEN_HOME,     page_home_build,     ui_home_keymap,       page_home_activate,     NULL,                 ui_opts_home,         NULL },
+    { "menu",       PAGE_NONE,       UI_SCREEN_MENU,     page_menu_build,     ui_mainmenu_keymap,   page_menu_activate,     page_menu_cycle,      ui_opts_menu,         page_menu_on_show },
+    { "settings",   PAGE_SETTINGS,   UI_SCREEN_SETTINGS, page_settings_build, page_settings_keymap, page_settings_activate, NULL,                 ui_opts_settings,     NULL },
+    { "display",    PAGE_DISPLAY,    UI_SCREEN_DISPLAY,  page_display_build,  page_display_keymap,  page_display_activate,  NULL,                 ui_opts_display,      NULL },
+    { "font",       PAGE_FONT,       UI_SCREEN_FONT,     page_font_build,     page_font_keymap,     page_font_activate,     NULL,                 ui_opts_font,         NULL },
+    { "speeddials", PAGE_SPEED_DIALS,UI_SCREEN_SPEEDDIALS,page_speeddial_build,page_speeddial_keymap,page_speeddial_activate,NULL,                ui_opts_speeddial,    NULL },
+    { "heldpress",  PAGE_HELD_PRESS, UI_SCREEN_HELDPRESS,page_heldpress_build,page_heldpress_keymap,page_heldpress_activate,NULL,               ui_opts_heldpress,    NULL },
+    { "callhist",   PAGE_CALL_HISTORY,UI_SCREEN_CALLHIST, page_callhist_build, page_callhist_keymap,  NULL,                   NULL,                 ui_opts_callhist,     NULL },
+    { "contacts",   PAGE_CONTACTS,   UI_SCREEN_CONTACTS, page_contacts_build, page_contacts_keymap,  NULL,                   NULL,                 ui_opts_contacts,     NULL },
+    { "stub",       PAGE_NONE,       UI_SCREEN_STUB,     page_stub_build,     ui_leaf_stub_keymap,  NULL,                   NULL,                 ui_opts_stub,         NULL },
+    { "lock",       PAGE_NONE,       UI_SCREEN_LOCK,     page_lock_build,     ui_leaf_lock_keymap,  NULL,                   NULL,                 ui_opts_lock,         NULL },
+};
+const int ui_page_count = ARRAY_LEN(ui_pages);
+_Static_assert(ARRAY_LEN(ui_pages) == UI_PAGE_COUNT,
+               "UI_PAGE_COUNT must match the table");
+
+/* Lookups — the three ways a caller names a page. */
+const ui_page_t *ui_page_for_screen(ui_screen_id_t screen)
+{
+    for (int i = 0; i < ui_page_count; i++) {
+        if (ui_pages[i].screen == screen) {
+            return &ui_pages[i];
+        }
+    }
+    return NULL;
+}
+
+const ui_page_t *ui_page_for_target(page_id_t id)
+{
+    if (id == PAGE_NONE) {
+        return NULL;
+    }
+    for (int i = 0; i < ui_page_count; i++) {
+        if (ui_pages[i].id == id) {
+            return &ui_pages[i];
+        }
+    }
+    return NULL;
+}
+
+const ui_page_t *ui_page_by_name(const char *name)
+{
+    if (!name) {
+        return NULL;
+    }
+    for (int i = 0; i < ui_page_count; i++) {
+        if (!strcmp(ui_pages[i].name, name)) {
+            return &ui_pages[i];
+        }
+    }
+    return NULL;
+}
+
+/* Boot-time validation of the table's invariants (spec §16.3): every screen
+ * is exactly one page, names and targets are unique, and no row is missing
+ * a required callback. A broken table would make a page unreachable — fail
+ * loudly at boot instead of on first show. */
+static bool pages_selfcheck(void)
+{
+    for (int i = 0; i < ui_page_count; i++) {
+        const ui_page_t *a = &ui_pages[i];
+        if (!a->name || !a->build || !a->keymap || !a->options) {
+            printf("ui_shell: page row %d is missing a required field\n", i);
+            return false;
+        }
+        for (int j = i + 1; j < ui_page_count; j++) {
+            const ui_page_t *b = &ui_pages[j];
+            if (b->screen == a->screen) {
+                printf("ui_shell: screen %d claimed by two page rows\n",
+                       (int)a->screen);
+                return false;
+            }
+            if (b->id != PAGE_NONE && b->id == a->id) {
+                printf("ui_shell: target %d claimed by two page rows\n",
+                       (int)a->id);
+                return false;
+            }
+            if (!strcmp(b->name, a->name)) {
+                printf("ui_shell: page name '%s' used twice\n", a->name);
+                return false;
+            }
+        }
+    }
+    for (int s = 0; s < UI_SCREEN_COUNT; s++) {
+        if (!ui_page_for_screen((ui_screen_id_t)s)) {
+            printf("ui_shell: screen %d has no page row\n", s);
+            return false;
+        }
+    }
+    return true;
 }
 
 /* The stub page's content lives in ui_leaf.c; the push is navigation, so it
@@ -728,24 +911,17 @@ void ui_shell_show_stub(page_id_t id)
     open_stub(id);
 }
 
-/* Open the page a target names: Chats -> the chat list; Settings -> the
- * settings tree; Calls pages -> their real list pages (spec §2); everything
- * else -> a stub page. Which settings row to land on is the caller's
- * business (see activate()), not a side effect of whatever the main menu
- * happens to have selected. */
+/* Open the page a target names: the registry row whose id matches (spec
+ * §16.3); a target with no row is stub territory. Which settings row to land
+ * on is the caller's business (see the activate callbacks), not a side effect
+ * of whatever the main menu happens to have selected. */
 static void open_page(page_id_t id)
 {
-    switch (id) {
-    case PAGE_CHATLIST: push_screen(UI_SCREEN_CHATLIST); break;
-    case PAGE_SETTINGS: push_screen(UI_SCREEN_SETTINGS); break;
-    case PAGE_DISPLAY:  push_screen(UI_SCREEN_DISPLAY);  break;
-    case PAGE_FONT:     push_screen(UI_SCREEN_FONT);     break;
-    case PAGE_SPEED_DIALS:  push_screen(UI_SCREEN_SPEEDDIALS);  break;
-    case PAGE_HELD_PRESS:   push_screen(UI_SCREEN_HELDPRESS);   break;
-    case PAGE_CALL_HISTORY: push_screen(UI_SCREEN_CALLHIST);    break;
-    case PAGE_CONTACTS:     push_screen(UI_SCREEN_CONTACTS);    break;
-    case PAGE_NONE:     break;
-    default:            open_stub(id);                   break;
+    const ui_page_t *pg = ui_page_for_target(id);
+    if (pg) {
+        push_screen(pg->screen);
+    } else if (id != PAGE_NONE) {
+        open_stub(id);
     }
 }
 
@@ -765,13 +941,9 @@ static void page_swipe(int dir)
     if (ui_sidebar_is_open()) {
         return;
     }
-    list_page_t *p = NULL;
-    if (ui_messaging_page() && lv_obj_is_visible(ui_list_root(ui_messaging_page()))) {
-        p = ui_messaging_page();
-    } else if (lv_obj_is_visible(scr_menu)) {
-        p = g_menu;
-    }
-    if (!p) {
+    const ui_page_t *pg = ui_page_for_screen(screen_stack[stack_top]);
+    list_page_t *p = pg ? page_lists[pg - ui_pages] : NULL;
+    if (!p || !lv_obj_is_visible(ui_list_root(p))) {
         return;
     }
     ui_list_gesture_cb cb = ui_list_page_gesture_cb(p);
@@ -836,87 +1008,24 @@ static void sidebar_on_key(hal_key_t key)
 
 void ui_shell_show_screen(ui_screen_id_t id)
 {
-    if (ui_home_root()) {
-        lv_obj_add_flag(ui_home_root(), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (ui_messaging_page()) {
-        lv_obj_add_flag(ui_list_root(ui_messaging_page()), LV_OBJ_FLAG_HIDDEN);
-    }
-    lv_obj_add_flag(scr_menu, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(ui_leaf_stub_root(), LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(ui_leaf_lock_root(), LV_OBJ_FLAG_HIDDEN);
-    if (g_settings) {
-        lv_obj_add_flag(ui_list_root(g_settings), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_display) {
-        lv_obj_add_flag(ui_list_root(g_display), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_font) {
-        lv_obj_add_flag(ui_list_root(g_font), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_speeddial) {
-        lv_obj_add_flag(ui_list_root(g_speeddial), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_heldpress) {
-        lv_obj_add_flag(ui_list_root(g_heldpress), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_callhist) {
-        lv_obj_add_flag(ui_list_root(g_callhist), LV_OBJ_FLAG_HIDDEN);
-    }
-    if (g_contacts) {
-        lv_obj_add_flag(ui_list_root(g_contacts), LV_OBJ_FLAG_HIDDEN);
-    }
-    switch (id) {
-    case UI_SCREEN_HOME:
-        if (ui_home_root()) {
-            lv_obj_remove_flag(ui_home_root(), LV_OBJ_FLAG_HIDDEN);
+    /* Hide every page root, show the one for `id` — a loop over the page
+     * registry (spec §16.3), not a switch. A screen with no row shows
+     * nothing (only possible for ids outside the harness). */
+    const ui_page_t *pg = ui_page_for_screen(id);
+    for (int i = 0; i < ui_page_count; i++) {
+        if (page_roots[i]) {
+            lv_obj_add_flag(page_roots[i], LV_OBJ_FLAG_HIDDEN);
         }
-        break;
-    case UI_SCREEN_CHATLIST:
-        if (ui_messaging_page() && ui_list_root(ui_messaging_page())) {
-            lv_obj_remove_flag(ui_list_root(ui_messaging_page()),
-                               LV_OBJ_FLAG_HIDDEN);
-        }
-        break;
-    case UI_SCREEN_MENU:
-        lv_obj_remove_flag(scr_menu, LV_OBJ_FLAG_HIDDEN);
-        ui_mainmenu_sync_layout();
-        break;
-    case UI_SCREEN_SETTINGS:
-        lv_obj_remove_flag(ui_list_root(g_settings), LV_OBJ_FLAG_HIDDEN);
-        break;
-    case UI_SCREEN_DISPLAY:
-        if (g_display) {
-            lv_obj_remove_flag(ui_list_root(g_display), LV_OBJ_FLAG_HIDDEN);
-        }
-        break;
-    case UI_SCREEN_FONT:
-        if (g_font) {
-            lv_obj_remove_flag(ui_list_root(g_font), LV_OBJ_FLAG_HIDDEN);
-        }
-        break;
-    case UI_SCREEN_SPEEDDIALS:
-        lv_obj_remove_flag(ui_list_root(g_speeddial), LV_OBJ_FLAG_HIDDEN);
-        break;
-    case UI_SCREEN_HELDPRESS:
-        lv_obj_remove_flag(ui_list_root(g_heldpress), LV_OBJ_FLAG_HIDDEN);
-        break;
-    case UI_SCREEN_CALLHIST:
-        lv_obj_remove_flag(ui_list_root(g_callhist), LV_OBJ_FLAG_HIDDEN);
-        break;
-    case UI_SCREEN_CONTACTS:
-        lv_obj_remove_flag(ui_list_root(g_contacts), LV_OBJ_FLAG_HIDDEN);
-        break;
-    case UI_SCREEN_STUB:
-        lv_obj_remove_flag(ui_leaf_stub_root(), LV_OBJ_FLAG_HIDDEN);
-        break;
-    case UI_SCREEN_LOCK:
-        lv_obj_remove_flag(ui_leaf_lock_root(), LV_OBJ_FLAG_HIDDEN);
-        break;
+    }
+    if (pg && page_roots[pg - ui_pages]) {
+        lv_obj_remove_flag(page_roots[pg - ui_pages], LV_OBJ_FLAG_HIDDEN);
+    }
+    if (pg && pg->on_show) {
+        pg->on_show();
     }
 
     /* The softkey legend follows the page (spec §12.2). */
-    update_softkeys(page_keymap());
+    update_softkeys(pg ? pg->keymap() : ui_home_keymap());
 }
 
 /* What a completed key press means (ui_input.c measures it and hands the
@@ -1320,40 +1429,29 @@ int ui_shell_init(void)
     lv_obj_set_style_bg_opa(content_area, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(content_area, 0, 0);
 
-    ui_messaging_build(content_area);   /* Messaging chat list        */
-    ui_home_build(content_area);        /* HOME: wallpaper + widgets  */
-    g_menu = ui_mainmenu_build(content_area);   /* main menu (ui_mainmenu.c) */
-    scr_menu = ui_list_root(g_menu);   /* the renderer's root object */
-    build_settings_screen();
-    build_display_screen();
-    build_font_screen();
-    build_speeddial_screen();
-    build_heldpress_screen();
-    build_callhist_screen();
-    build_contacts_screen();
-    ui_leaf_build_stub(content_area);   /* stub leaf (ui_leaf.c)   */
-    ui_leaf_build_lock(content_area);   /* lock screen (ui_leaf.c) */
-
-    /* The renderer's page pool is a compile-time size: a page that failed to
-     * build must be reported here, not crash the first time it is shown. */
-    if (!ui_home_root() || !ui_messaging_page() || !g_menu ||
-        !g_settings || !g_display || !g_font || !g_speeddial ||
-        !g_heldpress || !g_callhist || !g_contacts) {
-        printf("ui_shell: page pool exhausted — raise LIST_POOL in ui_menu.c\n");
+    /* Build every page in table order (CHATLIST first — the menu's unread
+     * badge reads the chat list). A page that failed to build must be
+     * reported here, not crash the first time it is shown. */
+    if (!pages_selfcheck()) {
         return -1;
+    }
+    for (int i = 0; i < ui_page_count; i++) {
+        page_roots[i] = ui_pages[i].build();
+    }
+    for (int i = 0; i < ui_page_count; i++) {
+        if (!page_roots[i]) {
+            printf("ui_shell: page '%s' failed to build\n", ui_pages[i].name);
+            return -1;
+        }
     }
 
     /* Touch on a row = select + activate (spec §1, issue #13): one shared
      * callback for every list page; the shell decides what activation means. */
-    ui_list_set_activate_cb(ui_messaging_page(), list_activate_cb);
-    ui_list_set_activate_cb(g_menu, list_activate_cb);
-    ui_list_set_activate_cb(g_settings, list_activate_cb);
-    ui_list_set_activate_cb(g_display, list_activate_cb);
-    ui_list_set_activate_cb(g_font, list_activate_cb);
-    ui_list_set_activate_cb(g_speeddial, list_activate_cb);
-    ui_list_set_activate_cb(g_heldpress, list_activate_cb);
-    ui_list_set_activate_cb(g_callhist, list_activate_cb);
-    ui_list_set_activate_cb(g_contacts, list_activate_cb);
+    for (int i = 0; i < ui_page_count; i++) {
+        if (page_lists[i]) {
+            ui_list_set_activate_cb(page_lists[i], list_activate_cb);
+        }
+    }
 
     /* The sidebar is created last so it draws above the content screens. */
     ui_sidebar_build(scr_root);

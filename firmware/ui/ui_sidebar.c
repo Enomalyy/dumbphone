@@ -16,8 +16,9 @@
 
 #include "ui_icons.h"
 #include "ui_keymap.h"
-#include "ui_menu.h"     /* ui_row_style()        */
-#include "ui_options.h"  /* opt_entry_t, ui_options_for() */
+#include "ui_menu.h"     /* ui_row_style()       */
+#include "ui_options.h"  /* opt_entry_t          */
+#include "ui_pages.h"    /* the page registry    */
 #include "ui_theme.h"
 #include "ui_sidebar.h"
 
@@ -181,11 +182,14 @@ void ui_sidebar_close(void)
     }
 }
 
-/* Populate the rows from `screen`'s options table and show the panel. */
+/* Populate the rows from `screen`'s page — its options accessor comes from
+ * the page registry (spec §16.3), not a switch over screens — and show the
+ * panel. */
 void ui_sidebar_open_for(ui_screen_id_t screen)
 {
-    int n;
-    g_side_opts = ui_options_for(screen, &n);
+    const ui_page_t *pg = ui_page_for_screen(screen);
+    int n = 0;
+    g_side_opts = (pg && pg->options) ? pg->options(&n) : NULL;
     if (n > OPT_MAX) {
         n = OPT_MAX;
     }

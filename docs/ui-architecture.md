@@ -243,7 +243,11 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 
 ## 10. Adding a page — the exact checklist
 
-A page is data, but it still touches six places. This is the whole list, in order:
+A page is data, and it touches exactly **one row in the page registry**
+(`ui_pages[]` in `ui/ui_shell.c`, §16.3). Everything the shell does with a page —
+show/hide, keymap, activate, move, swipe dispatch, the options sidebar, the
+harness `--screen` names, and the list pool's size — is a loop over that table,
+so there are no switches to extend. The whole list, in order:
 
 1. **Data:** a `menu_t` (title, items with `label`/`icon`/optional `sub`/`meta`/`badge`/
    `target`, optional `cats` strip, and its own `keymap_t`) in a small `ui_<page>.{h,c}`
@@ -256,16 +260,20 @@ A page is data, but it still touches six places. This is the whole list, in orde
    `MENU_MAX_CATS` (5) in `ui/ui_menu.h` — a page wider/taller than those is **clamped at
    build time with a printed message**, so raise the constant first.
 2. **Target id:** add it to `page_id_t` in `ui/ui_menu.h` if something opens it.
-3. **Build:** build it once in `ui_shell_init()`, **add its `.c` to `host/CMakeLists.txt`**
-   (the desktop build lists sources explicitly — forgetting this is an "undefined
-   reference", not a silent failure), raise `LIST_POOL` in `ui/ui_menu.c` (that constant is
-   the app's whole page budget; the shell prints an error if it runs out) and add the new
-   page to the `ui_shell_init()` NULL check.
-4. **Routing:** a `ui_screen_id_t` in `ui/ui_shell.h`, then a case in `ui_shell_show_screen()`,
-   `page_keymap()`, `move_selection()`, `activate()`, and `open_page()` if it is a target —
-   all in `ui_shell.c`, which is the only place that knows the screen stack (it hides every
-   other page's root in `ui_shell_show_screen()`, so add the new root there too).
-5. **Options:** a row table for it in `ui/ui_options.c` (the SHOULDER-L sidebar).
+3. **The row:** one line in `ui_pages[]` — name (the harness `--screen` string),
+   target id, screen id, and the callbacks: `build`, `keymap`, `activate`, `cycle`,
+   `options`, `on_show` (NULL where the page has none). A list page's build wrapper
+   records its renderer handle in `page_lists[]` (index = row position, the `ROW_*`
+   constants); a non-list page returns its root directly.
+4. **The three bookkeeping constants:** a new `ui_screen_id_t` value in `ui/ui_shell.h`
+   (before `UI_SCREEN_COUNT`), bump `UI_PAGE_COUNT` in `ui/ui_pages.h`, and **add its
+   `.c` to `host/CMakeLists.txt`** (the desktop build lists sources explicitly —
+   forgetting this is an "undefined reference", not a silent failure). A static assert
+   ties `UI_PAGE_COUNT` to the table's real length, and the boot self-check in
+   `ui_shell_init()` verifies every screen is exactly one row with unique names and
+   targets — missing any half of that fails the build or boots loudly.
+5. **Options:** a row table for it in `ui/ui_options.c` behind a per-page accessor
+   (`ui_opts_<page>()`) — the sidebar reads it through the registry row.
 6. **Swipe (only if it has a category strip):** `ui_list_set_gesture_cb()` on the built page
    with a handler that cycles its categories — see `chat_gesture`/`menu_gesture`.
 
