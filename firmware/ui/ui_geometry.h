@@ -38,6 +38,13 @@ int ui_geom_h(void);
 void ui_geometry_set_softkeys(bool shown);
 bool ui_geom_softkeys(void);
 
+/* Soft-key caps (spec §12.2): three across the bar, one per mirrored
+ * physical key. Insets and the inter-cap gap are fixed; the cap width is
+ * derived so all three stay on any panel (issue #14). */
+#define UI_SK_CAP_INSET    6   /* first cap's inset from the bar edge  */
+#define UI_SK_CAP_GAP      6   /* gap between neighbouring caps        */
+#define UI_SK_CAP_TOP      5   /* cap top inset within the bar         */
+
 /* Derived layout metrics — computed from the panel size above: */
 int ui_status_h(void);    /* pinned status bar height (top)          */
 int ui_softkey_h(void);   /* softkey bar height (bottom)             */
@@ -45,6 +52,8 @@ int ui_content_y(void);   /* content area top edge                   */
 int ui_content_h(void);   /* content area height                     */
 int ui_row_h(void);       /* list row height (menu renderer)         */
 int ui_sidebar_w(void);   /* options sidebar panel width             */
+int ui_sk_cap_w(void);    /* one soft-key cap width (three across)   */
+int ui_sk_cap_pitch(void);/* cap left edge to the next cap's left    */
 int ui_sidebar_row_h(void); /* options sidebar row height            */
 int ui_home_card_w(void); /* one HOME widget card width              */
 

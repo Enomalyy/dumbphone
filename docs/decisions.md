@@ -193,3 +193,48 @@ deleted — while it exists, the duplicate can always come back. The sidebar's "
 entries now switch the menu to the SETTINGS category (a new `OPT_ACTION_SETTINGS_CAT`).
 The rule is written into spec §14.13: *a page may not re-list another page's rows — if two
 screens show the same list, one of them is a bug.*
+
+---
+
+## 19. Font: face and size are two controls, on a per-role page (27/11, issue #16)
+
+Eli's sign-off on Stage A: *"Face and size should be separated, and down the line we will
+have a pass adding more/clearer fonts."* This is the separation; the new faces are #12's
+pass, not this one.
+
+- **Two rings, not one ladder.** `ui_font_face_next()` steps the face (the `ui_face_t`
+  ring, all five faces reachable for every role) and keeps the pixel size;
+  `ui_font_size_next()` steps the role's size list and keeps the face. The sizes are per
+  role — Headers {24, 32}, Text {24, 20, 28}, Subtext {16, 20} — entry 0 always the shipped
+  default, so a fresh install reproduces the goldens. A stored value outside a ring starts
+  that ring at 0 on the next press instead of jumping somewhere arbitrary.
+- **Where the rows live: the role page.** `FONT` lists Headers / Text / Subtext, each row
+  drawn in the level it names (the Stage A preview, kept). CENTER opens that role's page —
+  *Face* and *Size* as two rows, also drawn in the role's level. Six rows on one page was
+  rejected: the label column is ~138 px and a row at the 32 px header size cannot fit
+  "Headers Face", which would have forced the preview off the page that exists to show it.
+  The role page is one page whose title and rows follow the selected role
+  (`ui_settings_font_open()` before navigating, the same shape as `ui_chatview_open()`),
+  not three near-identical page modules.
+- **A size change moves the rows.** `rows_y()` already followed the header preference, but
+  the rows box was only repositioned on a full relayout, so a banner growth overlapped row 1
+  until the next softkey toggle. `ui_menu_restyle()` now repositions the box in the same
+  pass, and re-reads a data-driven page title (the role page's name); category pages' titles
+  stay owned by the category switch.
+- **Harness:** `--font role:face[:px][,...]` replaces `--font role:N`. Faces by short name
+  (`vt323|silk|pixel|jersey|goth`); a spec without px keeps the role's current size. Two new
+  scenes: `settings-font-sizes` (Headers 32 + Text 20, both Silkscreen — #16's acceptance
+  frame) and `settings-font-role` (the role page itself).
+- **Flash cost** stays in the per-face table (`host/assets/fonts/README.md`, spec §5); adding
+  faces is #12's job and must re-read that table before it lands.
+
+## 20. Soft-key caps are derived from the panel width (27/11, issue #14)
+
+The bar was the last surface with fixed 320-px geometry: 98 px caps at a 104 px pitch put
+the third cap off a 240 px panel. Cap width is now `(W − 2·inset − 2·gap) / 3` with inset 6
+and gap 6, pitch = cap + gap; at 320 this is exactly the old 98/104, so the default frames
+did not move, and 240 / 200 / 480 / 1280 all keep three caps inside the bar. The cap label
+also steps down when the cap is narrower than "OPTIONS" needs (never at 320 or 240), so the
+text cannot spill over its border. Frames that moved: every non-320 geometry scene
+(`*-240x320`, `*-240x400`, `*-480x800`, `*-480x640`, `*-1280x720`, `*-200x350`,
+`window-home-480x800`, `window-chat-digit-5-240x320`).

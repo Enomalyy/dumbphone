@@ -15,9 +15,11 @@
  *   THEME      one row per palette, its name; the active one shows ACTIVE
  *              in its value column — CENTER applies it (spec §14.11)
  *
- *   FONT       Headers            "<FACE> <px>", CENTER = next ladder entry
- *              Text
- *              Subtext
+ *   FONT       Headers · Text · Subtext — each row drawn in its own level;
+ *              CENTER opens that role's page
+ *
+ *   FONT/role  Face | Size — two INDEPENDENT rings (issue #16): CENTER on
+ *              Face advances the face and keeps the size, and vice versa
  *
  * Pages are data (spec §4): each page is one menu_t, and every row's value
  * lives in its `meta` field, which the generic renderer (ui_menu.c) draws
@@ -125,18 +127,19 @@ static void refresh_theme_meta(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Font page — the three roles of spec §14.12                          */
+/* Font pages — the three roles (spec §14.12, issue #16)               */
 /* ------------------------------------------------------------------ */
 
-/* Each row's LABEL is drawn in the level it names, at the level's current
- * face and size — so the page is its own preview: change Headers and the
- * word "Headers" changes with every title in the UI. */
+/* The FONT page lists the three roles. Each row's LABEL is drawn in the
+ * level it names, at the level's current face and size — so the page is its
+ * own preview: change Headers and the word "Headers" changes with every
+ * title in the UI. CENTER on a row opens that role's page (Face · Size). */
 static menu_item_t g_font_items[UI_FONT_ROLE_COUNT] = {
-    { .label = "Headers", .icon = I_HEADING,   .target = PAGE_NONE,
+    { .label = "Headers", .icon = I_HEADING,   .target = PAGE_FONT_DETAIL,
       .font_role = MENU_FONT_HEADER },
-    { .label = "Text",    .icon = I_FONT,      .target = PAGE_NONE,
+    { .label = "Text",    .icon = I_FONT,      .target = PAGE_FONT_DETAIL,
       .font_role = MENU_FONT_TEXT },
-    { .label = "Subtext", .icon = I_PARAGRAPH, .target = PAGE_NONE,
+    { .label = "Subtext", .icon = I_PARAGRAPH, .target = PAGE_FONT_DETAIL,
       .font_role = MENU_FONT_SUBTEXT },
 };
 
@@ -151,9 +154,36 @@ static menu_t g_font_page = {
     .keys    = km_settings,
 };
 
-/* "<FACE SHORT> <px>", the font page's value text. One buffer per row: the
+/* The ROLE page: two rows, Face and Size, independent (issue #16). It is one
+ * page whose contents follow the role the Font page selected — the labels
+ * are the two words, drawn in the role's own level, so even a 32 px header
+ * face has room. */
+static uint8_t g_font_role_sel;          /* ui_font_role_t, 0 until opened */
+
+static menu_item_t g_font_role_items[2] = {
+    { .label = "Face", .icon = I_FONT,    .target = PAGE_NONE },
+    { .label = "Size", .icon = I_HEADING, .target = PAGE_NONE },
+};
+
+static menu_t g_font_role_page = {
+    .title   = "FONT",
+    .items   = g_font_role_items,
+    .n_items = 2,
+    .sel     = 0,
+    .cats    = NULL,
+    .n_cats  = 0,
+    .cat_sel = 0,
+    .keys    = km_settings,
+};
+
+static const char *const g_font_role_cap[UI_FONT_ROLE_COUNT] = {
+    "HEADERS", "TEXT", "SUBTEXT",
+};
+
+/* "<FACE SHORT> <px>", the Font page's value text. One buffer per row: the
  * renderer keeps pointers, so the strings must outlive the call. */
 static char g_font_meta[UI_FONT_ROLE_COUNT][16];
+static char g_font_role_meta[2][16];
 
 static void refresh_font_meta(void)
 {
@@ -163,6 +193,26 @@ static void refresh_font_meta(void)
                  ui_face_short((ui_face_t)p.face), (unsigned)p.px);
         g_font_items[r].meta = g_font_meta[r];
     }
+}
+
+/* The role page's own row values: the face's full name and the pixel size.
+ * Both are short enough for the value column at every face and size. */
+static void refresh_font_role_meta(void)
+{
+    ui_font_role_t role = (ui_font_role_t)g_font_role_sel;
+    ui_font_pref_t p = ui_font_pref(role);
+    snprintf(g_font_role_meta[0], sizeof g_font_role_meta[0], "%s",
+             ui_face_name((ui_face_t)p.face));
+    snprintf(g_font_role_meta[1], sizeof g_font_role_meta[1], "%u px",
+             (unsigned)p.px);
+    g_font_role_items[0].meta = g_font_role_meta[0];
+    g_font_role_items[1].meta = g_font_role_meta[1];
+
+    /* Rows drawn in the level they edit (MENU_FONT_* is UI_FONT_* + 1). */
+    uint8_t fr = (uint8_t)(MENU_FONT_HEADER + role);
+    g_font_role_items[0].font_role = fr;
+    g_font_role_items[1].font_role = fr;
+    g_font_role_page.title = g_font_role_cap[role];
 }
 
 /* ------------------------------------------------------------------ */
@@ -210,6 +260,22 @@ menu_t *ui_settings_font_page(void)
 {
     refresh_values();
     return &g_font_page;
+}
+
+void ui_settings_font_open(uint8_t role)
+{
+    if (role < UI_FONT_ROLE_COUNT) {
+        g_font_role_sel = role;
+    }
+}
+
+menu_t *ui_settings_font_role_page(void)
+{
+    if (g_font_role_sel >= UI_FONT_ROLE_COUNT) {
+        g_font_role_sel = UI_FONT_HEADER;
+    }
+    refresh_font_role_meta();
+    return &g_font_role_page;
 }
 
 ui_setting_effect_t ui_settings_activate(uint8_t sel)
@@ -277,10 +343,28 @@ ui_setting_effect_t ui_settings_font_activate(uint8_t sel)
     if (sel >= UI_FONT_ROLE_COUNT) {
         return UI_SETTING_EFFECT_NONE;
     }
-    /* The ladder advances face AND size; ui_font_pref_next() runs the apply
-     * pass itself, so the panel shows the new face on the next paint. */
-    ui_font_pref_next((ui_font_role_t)sel);
-    refresh_values();
+    /* The Font page's rows navigate to the role page; they no longer cycle
+     * anything themselves (issue #16). */
+    return UI_SETTING_EFFECT_NONE;
+}
+
+ui_setting_effect_t ui_settings_font_role_activate(uint8_t sel)
+{
+    if (g_font_role_sel >= UI_FONT_ROLE_COUNT) {
+        return UI_SETTING_EFFECT_NONE;
+    }
+    /* Row 0 cycles the FACE, row 1 the SIZE — each keeps the other half of
+     * the pair (issue #16). The apply pass runs inside the ui_theme call, so
+     * the panel shows the change on the next paint. */
+    if (sel == 0) {
+        ui_font_face_next((ui_font_role_t)g_font_role_sel);
+    } else if (sel == 1) {
+        ui_font_size_next((ui_font_role_t)g_font_role_sel);
+    } else {
+        return UI_SETTING_EFFECT_NONE;
+    }
+    refresh_font_role_meta();
+    refresh_font_meta();
     return UI_SETTING_EFFECT_FONT;
 }
 

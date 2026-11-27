@@ -507,6 +507,17 @@ A third entry under Display, beside Theme and Menu Style: *Font*, cycling the UI
 decision** — Eli tunes them himself as the design settles. So the wave ships the *mechanism* and a
 sensible default, not a finely-argued opinion about which face wins.
 
+**Face and size are two independent controls (Eli, 27/11 — issue #16).** The Font page lists the
+three roles, each row drawn in its own level; CENTER opens that role's page, which has exactly two
+rows: *Face* (the face ring, `ui_face_t` order) and *Size* (the role's own size list). Each keeps
+the other half of the pair: advancing the face leaves the size alone and vice versa. The role page
+rather than six rows on the Font page because the label column is ~138 px and a row drawn in its
+own level can be 32 px — a combined "Headers Face" row cannot be drawn in the level it names,
+which is the page's whole preview idea. Titles: the Font page is `FONT`, the role page carries the
+role's name. The last control this replaced was a single ladder of `{face, px}` pairs; no such
+ladder remains. A later pass (#12, more/clearer faces) is where faces get re-cut for their design
+grid.
+
 - **What the Headers role owns** (Eli, 27/11): page banners *and* the soft-key caps. The caps take the
   chosen family at the bar's own size (16 px) — a 32 px face cannot fit a 36 px bar without moving
   every frame. The banner takes face and size, and the header slot grows with it — the rows start
@@ -514,8 +525,8 @@ sensible default, not a finely-argued opinion about which face wins.
   not move.
   Every list page draws its name — pages without a category strip used to draw none, which made
   Settings and Display look like the same window twice.
-- Offer at least three faces, with the size alongside them (e.g. *Pixelify 16*, *Jersey 10*,
-  *DotGothic 16*), because size affects legibility more than face does at this panel density.
+- Offer at least three faces and a size list per role, because size affects legibility more than
+  face does at this panel density; the two are chosen separately (issue #16).
 - Faces may be baked at 1bpp (crisp) or 8bpp (antialiased); both are legitimate *options* — the
   user picks what reads best — but the trade-off must be stated in the UI or README, not hidden.
   Do not remove a face from the list on the grounds that it "looks soft"; that is Eli's call to make.

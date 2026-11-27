@@ -2,13 +2,14 @@
  * ui_settings.h — the settings state and its Display / Font pages.
  *
  * The settings list itself lives in the main menu's SETTINGS category
- * (spec §14.13 — there is no settings-tree page); this module owns the two
- * pages that category reaches, both canonical menu_t pages rendered by the
+ * (spec §14.13 — there is no settings-tree page); this module owns the
+ * pages that category reaches, all canonical menu_t pages rendered by the
  * same generic renderer as every other list page:
  *
- *   DISPLAY   Theme (submenu) · Font (navigable) · Menu Style · Softkey bar
+ *   DISPLAY   Theme (submenu) · Font (sub-page) · Menu Style · Softkey bar
  *   THEME     one row per named palette; the active one shows ACTIVE
  *   FONT      Headers · Text · Subtext   (spec §14.12's three levels)
+ *   FONT/role Face · Size — two independent controls (issue #16)
  *
  * A row without a `target` is a VALUE row: CENTER cycles it. The page
  * function that handles the press returns what the change needs from the
@@ -70,6 +71,12 @@ menu_t *ui_settings_display_page(void);
 menu_t *ui_settings_theme_page(void);
 menu_t *ui_settings_font_page(void);
 
+/* The role page behind a Font row (issue #16): two rows, Face and Size.
+ * ui_settings_font_open() records which role CENTER selected; the page
+ * function refreshes its rows and title from that role. */
+void   ui_settings_font_open(uint8_t role);
+menu_t *ui_settings_font_role_page(void);
+
 /* The current Call Preference value as its display string ("WHATSAPP" /
  * "STANDARD"). The main menu's SETTINGS category shows it on its Call
  * Preference row's meta column. */
@@ -83,6 +90,7 @@ ui_setting_effect_t ui_settings_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_display_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_theme_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_font_activate(uint8_t sel);
+ui_setting_effect_t ui_settings_font_role_activate(uint8_t sel);
 
 /* Current menu style (CAROUSEL / GRID / MOVING — one cycling control,
  * spec §14.3). The grid

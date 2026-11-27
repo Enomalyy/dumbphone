@@ -391,8 +391,8 @@ static list_page_t *page_lists[UI_PAGE_COUNT];
 /* Row positions in ui_pages[] (one row per screen — see pages_selfcheck). */
 enum {
     ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_DISPLAY, ROW_THEME,
-    ROW_FONT, ROW_SPEEDDIALS, ROW_HELDPRESS, ROW_CALLHIST, ROW_CONTACTS,
-    ROW_STUB, ROW_LOCK, ROW_CONV,
+    ROW_FONT, ROW_FONTDETAIL, ROW_SPEEDDIALS, ROW_HELDPRESS, ROW_CALLHIST,
+    ROW_CONTACTS, ROW_STUB, ROW_LOCK, ROW_CONV,
 };
 _Static_assert(ROW_CONV + 1 == UI_SCREEN_COUNT, "one registry row per screen");
 
@@ -645,6 +645,15 @@ static lv_obj_t *page_font_build(void)
     return p ? ui_list_root(p) : NULL;
 }
 
+/* Font > a role — Face and Size as two independent rings (issue #16). */
+static lv_obj_t *page_fontdetail_build(void)
+{
+    list_page_t *p = ui_list_build(content_area,
+                                   ui_settings_font_role_page());
+    page_lists[ROW_FONTDETAIL] = p;
+    return p ? ui_list_root(p) : NULL;
+}
+
 /* Speed-dial sub-page — a canonical list page over ui_speeddial's menu_t. */
 static lv_obj_t *page_speeddial_build(void)
 {
@@ -700,6 +709,7 @@ static lv_obj_t *page_conv_build(void)
 static const keymap_t *page_display_keymap(void)   { return &ui_settings_display_page()->keys; }
 static const keymap_t *page_theme_keymap(void)     { return &ui_settings_theme_page()->keys; }
 static const keymap_t *page_font_keymap(void)      { return &ui_settings_font_page()->keys; }
+static const keymap_t *page_fontdetail_keymap(void) { return &ui_settings_font_role_page()->keys; }
 static const keymap_t *page_speeddial_keymap(void) { return &ui_speeddial_page()->keys; }
 static const keymap_t *page_heldpress_keymap(void) { return &ui_heldpress_page()->keys; }
 static const keymap_t *page_callhist_keymap(void)  { return &ui_calls_history_page()->keys; }
@@ -776,10 +786,33 @@ static void page_theme_activate(void)
     ui_list_refresh(p);
 }
 
+/* The Font page re-reads its values after a role page changed them. */
+static void page_font_on_show(void)
+{
+    ui_settings_font_page();       /* refresh the meta strings */
+    ui_list_refresh(page_lists[ROW_FONT]);
+}
+
+/* The role page re-reads its rows and title for the role just selected. */
+static void page_fontdetail_on_show(void)
+{
+    ui_settings_font_role_page();  /* refresh rows + title */
+    ui_list_refresh(page_lists[ROW_FONTDETAIL]);
+}
+
 static void page_font_activate(void)
 {
     list_page_t *p = page_lists[ROW_FONT];
-    ui_settings_font_activate(ui_list_sel(p));
+    /* The rows NAVIGATE now: the selected role opens its Face/Size page
+     * (issue #16 — nothing cycles on this page any more). */
+    ui_settings_font_open(ui_list_sel(p));
+    open_page(PAGE_FONT_DETAIL);
+}
+
+static void page_fontdetail_activate(void)
+{
+    list_page_t *p = page_lists[ROW_FONTDETAIL];
+    ui_settings_font_role_activate(ui_list_sel(p));
     ui_list_refresh(p);
 }
 
@@ -820,7 +853,8 @@ const ui_page_t ui_pages[] = {
     { "menu",       PAGE_NONE,       UI_SCREEN_MENU,     page_menu_build,     ui_mainmenu_keymap,   page_menu_activate,     page_menu_cycle,      ui_opts_menu,         page_menu_on_show },
     { "display",    PAGE_DISPLAY,    UI_SCREEN_DISPLAY,  page_display_build,  page_display_keymap,  page_display_activate,  NULL,                 ui_opts_display,      NULL },
     { "theme",      PAGE_THEME,      UI_SCREEN_THEME,    page_theme_build,    page_theme_keymap,    page_theme_activate,    NULL,                 ui_opts_theme,        NULL },
-    { "font",       PAGE_FONT,       UI_SCREEN_FONT,     page_font_build,     page_font_keymap,     page_font_activate,     NULL,                 ui_opts_font,         NULL },
+    { "font",       PAGE_FONT,       UI_SCREEN_FONT,     page_font_build,     page_font_keymap,     page_font_activate,     NULL,                 ui_opts_font,         page_font_on_show },
+    { "fontdetail", PAGE_FONT_DETAIL,UI_SCREEN_FONT_DETAIL, page_fontdetail_build, page_fontdetail_keymap, page_fontdetail_activate, NULL,     ui_opts_font,         page_fontdetail_on_show },
     { "speeddials", PAGE_SPEED_DIALS,UI_SCREEN_SPEEDDIALS,page_speeddial_build,page_speeddial_keymap,page_speeddial_activate,NULL,                ui_opts_speeddial,    NULL },
     { "heldpress",  PAGE_HELD_PRESS, UI_SCREEN_HELDPRESS,page_heldpress_build,page_heldpress_keymap,page_heldpress_activate,NULL,               ui_opts_heldpress,    NULL },
     { "callhist",   PAGE_CALL_HISTORY,UI_SCREEN_CALLHIST, page_callhist_build, page_callhist_keymap,  NULL,                   NULL,                 ui_opts_callhist,     NULL },
@@ -1372,12 +1406,19 @@ lv_font_t *ui_font_of(ui_font_role_t role)
     }
 }
 /* The HEADERS face at the cap's own size: the bar follows the chosen family
- * without needing to grow. Falls back to the chrome face if the face cannot
- * be loaded at that size. */
+ * without needing to grow. The size is the bar's, but a narrow panel's caps
+ * are narrower than the word OPTIONS — so the size steps down just enough
+ * to keep every cap label inside its box (issue #14). Falls back to the
+ * chrome face if the face cannot be loaded at that size. */
 static lv_font_t *softkey_face(void)
 {
     ui_font_pref_t p = ui_font_pref(UI_FONT_HEADER);
-    lv_font_t *f = role_face(UI_FONT_HEADER, p.face, UI_FONT_CHROME_PX);
+    int px = UI_FONT_CHROME_PX;
+    int fit = (UI_SK_CAP_W - 10) / 4;   /* "OPTIONS": 7 glyphs + inset */
+    if (fit < px) {
+        px = fit > 8 ? fit : 8;
+    }
+    lv_font_t *f = role_face(UI_FONT_HEADER, p.face, px);
     return f ? f : f_chrome;
 }
 

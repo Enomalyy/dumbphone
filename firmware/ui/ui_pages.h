@@ -35,7 +35,7 @@ extern const ui_page_t ui_pages[];
  * ui_page_count is the same value at runtime. A static assert in ui_shell.c
  * keeps the two in lockstep — adding a page is one row plus bumping this
  * number, and forgetting either half fails the build. */
-#define UI_PAGE_COUNT 13
+#define UI_PAGE_COUNT 14
 extern const int ui_page_count;             /* = ARRAY_LEN(ui_pages)       */
 
 /* The row for a screen id (NULL if not a page). */

@@ -53,6 +53,7 @@
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
 #include "model/chat_model.h"
+#include "model/settings.h"
 #include "ui/ui_geometry.h"
 #include "ui/ui_pages.h"
 #include "ui/ui_settings.h"
@@ -270,7 +271,7 @@ int main(int argc, char **argv)
     int hold_ms = 0;                /* how long --key presses stay down */
     const char *menu_style = NULL;   /* "carousel" | "grid"         */
     const char *theme_name = NULL;    /* dark|light|amber|slate|mono  */
-    const char *font_cycle = NULL;    /* "header|text|subtext[:N]"   */
+    const char *font_prefs = NULL;    /* "role:face[:px][,role:face[:px]]" */
     const char *data_path = NULL;     /* explicit chat source file   */
     const char *geom = NULL;          /* "WxH" panel geometry          */
     /* Loopback by default: the viewport is a dev tool and should not be
@@ -347,7 +348,7 @@ int main(int argc, char **argv)
         } else if (!strcmp(argv[i], "--theme") && i + 1 < argc) {
             theme_name = argv[++i];
         } else if (!strcmp(argv[i], "--font") && i + 1 < argc) {
-            font_cycle = argv[++i];
+            font_prefs = argv[++i];
         } else if (!strcmp(argv[i], "--data") && i + 1 < argc) {
             data_path = argv[++i];
         } else if ((!strcmp(argv[i], "--geom") || !strcmp(argv[i], "--geometry"))
@@ -460,23 +461,41 @@ int main(int argc, char **argv)
         }
         ui_shell_set_startup_theme(t);
     }
-    if (font_cycle) {
-        int n = 1;
-        char name[16] = { 0 };
-        if (sscanf(font_cycle, "%15[^:]:%d", name, &n) < 1) {
-            fprintf(stderr, "[main] bad --font '%s'\n", font_cycle);
-            return 2;
-        }
-        ui_font_role_t role = !strcmp(name, "header") ? UI_FONT_HEADER
-                            : !strcmp(name, "text")   ? UI_FONT_TEXT
-                            : !strcmp(name, "subtext") ? UI_FONT_SUBTEXT
-                            : (ui_font_role_t)-1;
-        if ((int)role < 0) {
-            fprintf(stderr, "[main] --font wants header|text|subtext[:N]\n");
-            return 2;
-        }
-        for (int k = 0; k < n; k++) {
-            ui_font_pref_next(role);
+    if (font_prefs) {
+        /* "role:face[:px][,role:face[:px]]..." — face and size are set
+         * independently (issue #16). A spec without px keeps the role's
+         * current size. */
+        char buf[128];
+        snprintf(buf, sizeof buf, "%s", font_prefs);
+        for (char *spec = strtok(buf, ","); spec; spec = strtok(NULL, ",")) {
+            char role_s[16] = { 0 }, face_s[16] = { 0 };
+            int px = 0;
+            if (sscanf(spec, "%15[^:]:%15[^:]:%d", role_s, face_s, &px) < 2) {
+                fprintf(stderr, "[main] bad --font '%s'\n", spec);
+                return 2;
+            }
+            ui_font_role_t role = !strcmp(role_s, "header")  ? UI_FONT_HEADER
+                                : !strcmp(role_s, "text")    ? UI_FONT_TEXT
+                                : !strcmp(role_s, "subtext") ? UI_FONT_SUBTEXT
+                                : (ui_font_role_t)-1;
+            if ((int)role < 0) {
+                fprintf(stderr, "[main] --font role wants "
+                                "header|text|subtext (got '%s')\n", role_s);
+                return 2;
+            }
+            int face = ui_face_lookup(face_s);
+            if (face < 0) {
+                fprintf(stderr, "[main] --font face '%s' unknown "
+                                "(vt323|silk|pixel|jersey|goth)\n", face_s);
+                return 2;
+            }
+            if (px == 0) {
+                px = ui_font_pref(role).px;
+            } else if (px < 8 || px > 64) {
+                fprintf(stderr, "[main] --font px %d outside 8..64\n", px);
+                return 2;
+            }
+            model_settings_set_font((int)role, (uint8_t)face, (uint8_t)px);
         }
     }
 

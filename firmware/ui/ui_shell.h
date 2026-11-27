@@ -36,6 +36,7 @@ typedef enum {
     UI_SCREEN_DISPLAY,       /* SETTINGS category: theme/font/menu/bar (spec §14) */
     UI_SCREEN_THEME,         /* Settings > Display > Theme: the named palettes */
     UI_SCREEN_FONT,          /* Settings > Display > Font: headers/text/subtext */
+    UI_SCREEN_FONT_DETAIL,   /* Font > a role: Face and Size, independent (§14.12) */
     UI_SCREEN_SPEEDDIALS,    /* speed-dial config sub-page (T9 1..9 names)       */
     UI_SCREEN_HELDPRESS,     /* held-press key config sub-page (spec §2)         */
     UI_SCREEN_CALLHIST,      /* Calls: recent calls list (spec §2)               */

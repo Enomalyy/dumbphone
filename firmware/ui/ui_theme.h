@@ -53,11 +53,11 @@ extern "C" {
 #define UI_SOFTKEY_H      ui_softkey_h()   /* soft-key action bar height */
 
 /* Softkey caps (spec §12.2): one per mirrored physical key — left under
- * SHOULDER-L, centre under OK, right under SHOULDER-R. */
-#define UI_SK_CAP_W       98   /* cap width                            */
-#define UI_SK_CAP_PITCH  104   /* cap left-edge to cap left-edge       */
-#define UI_SK_CAP_INSET    6   /* first cap's inset from the bar edge  */
-#define UI_SK_CAP_TOP      5   /* cap top inset within the bar         */
+ * SHOULDER-L, centre under OK, right under SHOULDER-R. Width and pitch are
+ * runtime (ui_geometry.c): three equal caps share the bar at any panel
+ * width, so no cap can fall off a narrow panel (issue #14). */
+#define UI_SK_CAP_W       ui_sk_cap_w()     /* cap width               */
+#define UI_SK_CAP_PITCH   ui_sk_cap_pitch() /* cap left edge to the next */
 #define UI_CONTENT_Y  ui_content_y()
 #define UI_CONTENT_H  ui_content_h()
 
@@ -270,10 +270,19 @@ typedef struct {
 /* Current preference of a role (data only; the shell resolves it to a font). */
 ui_font_pref_t ui_font_pref(ui_font_role_t role);
 
-/* Advance the role to the next entry of its test ladder (face + size
- * together — the final picker will split the two; until then one CENTER is
- * one visible step). Runs the apply pass, so the change is immediate. */
-void ui_font_pref_next(ui_font_role_t role);
+/* The two independent controls (issue #16, decisions §19). Each keeps the
+ * other half of the pair: advancing the face leaves the pixel size alone
+ * and vice versa. Both run the apply pass, so the change is immediate. */
+void ui_font_face_next(ui_font_role_t role);
+void ui_font_size_next(ui_font_role_t role);
+
+/* The sizes a role offers, in ring order (entry 0 = the shipped default).
+ * *px points at the table; returns the count. */
+int ui_font_sizes(ui_font_role_t role, const uint8_t **px);
+
+/* Face by short name ("SILK", any case) — the harness CLI's --font spec.
+ * Returns the ui_face_t id, or -1 when the name is unknown. */
+int ui_face_lookup(const char *name);
 
 /* The LVGL face behind a role (defined in the shell, which owns the font
  * objects). Renderers that draw text in a specific level call this. */

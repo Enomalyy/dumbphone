@@ -16,8 +16,11 @@
  * The CHOSEN theme and font preferences are not state of this file any more:
  * they live in the model layer (model/settings.c, spec §16.4) and persist
  * through hal_storage. This file owns the palette tables, the face data and
- * the test ladders — presentation machinery around the model's values.
+ * the two preference rings (faces, sizes) — presentation machinery around
+ * the model's values.
  */
+
+#include <strings.h>
 
 #include "model/settings.h"
 #include "ui/ui_theme.h"
@@ -164,39 +167,17 @@ static const char *const g_font_role_name[UI_FONT_ROLE_COUNT] = {
     [UI_FONT_SUBTEXT] = "Subtext",
 };
 
-/* The TEST LADDERS. Entry 0 is the shipped default (pixel-identical), and
- * each press steps face AND size together so one CENTER is one visible
- * change on the panel. §14.12's final picker splits the two; this is the
- * mechanism under test, and every candidate face is reachable. */
-typedef struct { uint8_t face; uint8_t px; } font_step_t;
-
-static const font_step_t g_ladder[UI_FONT_ROLE_COUNT][6] = {
-    [UI_FONT_HEADER] = {
-        { UI_FACE_SILKSCREEN, UI_FONT_TITLE_PX },   /* shipped            */
-        { UI_FACE_SILKSCREEN, 32 },
-        { UI_FACE_VT323,      32 },
-        { UI_FACE_JERSEY,     32 },
-        { UI_FACE_DOTGOTHIC,  24 },
-        { UI_FACE_PIXELIFY,   32 },
-    },
-    [UI_FONT_TEXT] = {
-        { UI_FACE_VT323,      UI_FONT_BODY_L_PX },  /* shipped            */
-        { UI_FACE_VT323,      20 },
-        { UI_FACE_VT323,      28 },
-        { UI_FACE_JERSEY,     24 },
-        { UI_FACE_DOTGOTHIC,  24 },
-        { UI_FACE_SILKSCREEN, 24 },
-    },
-    [UI_FONT_SUBTEXT] = {
-        { UI_FACE_PIXELIFY,   UI_FONT_BODY_M_PX },  /* shipped (baked)    */
-        { UI_FACE_PIXELIFY,   20 },
-        { UI_FACE_VT323,      16 },
-        { UI_FACE_JERSEY,     16 },
-        { UI_FACE_DOTGOTHIC,  16 },
-        { UI_FACE_SILKSCREEN, 16 },
-    },
+/* The SIZES each role offers, in ring order (issue #16). Entry 0 is the
+ * shipped default, so a fresh install cycles up from what the goldens were
+ * shot with. The list is per ROLE, not per face: the face ring and the size
+ * ring are independent — that independence is the fix, and a face rendered
+ * off its design grid is a later, separate pass (#12). */
+static const uint8_t g_sizes[UI_FONT_ROLE_COUNT][3] = {
+    [UI_FONT_HEADER]  = { UI_FONT_TITLE_PX, 32 },
+    [UI_FONT_TEXT]    = { UI_FONT_BODY_L_PX, 20, 28 },
+    [UI_FONT_SUBTEXT] = { UI_FONT_BODY_M_PX, 20 },
 };
-#define LADDER_N ((int)(sizeof g_ladder[0] / sizeof g_ladder[0][0]))
+static const uint8_t g_size_n[UI_FONT_ROLE_COUNT] = { 2, 3, 2 };
 
 /* ================================================================== */
 /* Live state                                                          */
@@ -216,28 +197,61 @@ ui_font_pref_t ui_font_pref(ui_font_role_t role)
     return p;
 }
 
-void ui_font_pref_next(ui_font_role_t role)
+void ui_font_face_next(ui_font_role_t role)
 {
     if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
         return;
     }
-    /* The chosen (face, px) lives in the model; the ladder here is the ring
-     * of candidates it steps through. Find the current entry (a stored value
-     * outside the ladder starts the ring from the beginning), then step. */
     ui_font_pref_t cur = ui_font_pref(role);
-    int idx = 0;
-    for (int i = 0; i < LADDER_N; i++) {
-        if (g_ladder[role][i].face == cur.face && g_ladder[role][i].px == cur.px) {
+    int next = (cur.face + 1) % UI_FACE_COUNT;
+    model_settings_set_font(role, (uint8_t)next, cur.px);   /* size kept */
+    if (g_apply_cb) {
+        g_apply_cb();   /* re-resolve the faces, then restyle every page */
+    }
+}
+
+void ui_font_size_next(ui_font_role_t role)
+{
+    if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
+        return;
+    }
+    ui_font_pref_t cur = ui_font_pref(role);
+    int n = g_size_n[role];
+    int idx = 0;   /* a stored size outside the ring starts it at 0 */
+    for (int i = 0; i < n; i++) {
+        if (g_sizes[role][i] == cur.px) {
             idx = i;
             break;
         }
     }
-    int next = (idx + 1) % LADDER_N;
-    model_settings_set_font(role, g_ladder[role][next].face,
-                            g_ladder[role][next].px);
+    int px = g_sizes[role][(idx + 1) % n];
+    model_settings_set_font(role, cur.face, (uint8_t)px);   /* face kept */
     if (g_apply_cb) {
-        g_apply_cb();   /* re-resolve the faces, then restyle every page */
+        g_apply_cb();
     }
+}
+
+int ui_font_sizes(ui_font_role_t role, const uint8_t **px)
+{
+    if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
+        if (px) *px = NULL;
+        return 0;
+    }
+    if (px) *px = g_sizes[role];
+    return g_size_n[role];
+}
+
+int ui_face_lookup(const char *name)
+{
+    if (!name) return -1;
+    for (int i = 0; i < UI_FACE_COUNT; i++) {
+        const char *a = g_face_short[i];
+        const char *b = g_face_name[i];
+        if ((a && !strcasecmp(a, name)) || (b && !strcasecmp(b, name))) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 const char *ui_font_role_name(ui_font_role_t role)

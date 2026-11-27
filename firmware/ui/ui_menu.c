@@ -834,7 +834,21 @@ void ui_menu_restyle(void)
             continue;
         }
         lv_obj_set_style_bg_color(p->root, C_GROUND, 0);
+        /* The rows start under the banner, whose slot follows the HEADERS
+         * size (rows_y): a size change must move them in the same pass, or
+         * a 32 px banner overlaps them until the next relayout. */
+        if (p->rows_box) {
+            int y0 = rows_y();
+            lv_obj_set_pos(p->rows_box, 0, y0);
+            lv_obj_set_size(p->rows_box, PANEL_W, CONTENT_H - y0);
+        }
         if (p->title_lbl) {
+            /* A page whose title is data (the Font role page names its role)
+             * re-reads it here; a category page's title is owned by the
+             * category switch (ui_list_set_category). */
+            if (p->m->n_cats == 0 && p->m->title) {
+                lv_label_set_text(p->title_lbl, p->m->title);
+            }
             lv_obj_set_style_text_color(p->title_lbl, C_TEXT, 0);
             /* The banner wears the HEADERS role, so a font change has to
              * reach it too — colours alone left every page title on the face

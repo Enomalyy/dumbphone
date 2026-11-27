@@ -97,6 +97,20 @@ int ui_sidebar_row_h(void)
     return scale_h(40, 32, 64);
 }
 
+/* Three soft-key caps share the bar: inset 6 at each edge and a 6 px gap
+ * between neighbours. (320 - 2*6 - 2*6) / 3 == 98, the old UI_SK_CAP_W, and
+ * the pitch is cap + gap == 104 — so the default frame is unchanged; every
+ * other width keeps all three caps on the panel (issue #14). */
+int ui_sk_cap_w(void)
+{
+    return (g_w - 2 * UI_SK_CAP_INSET - 2 * UI_SK_CAP_GAP) / 3;
+}
+
+int ui_sk_cap_pitch(void)
+{
+    return ui_sk_cap_w() + UI_SK_CAP_GAP;
+}
+
 /* Three cards across the panel: inset 11 on each side, gap 5 between.
  * (320 - 2*11 - 2*5) / 3 == 96, the old UI_HOME_CARD_W. */
 int ui_home_card_w(void)

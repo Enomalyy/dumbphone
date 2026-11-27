@@ -9,7 +9,8 @@
 #            --cycle left|right N, --key <name> [N], --activate N,
 #            --swipe up|down|left|right [dist], --tap x y, --press <id>,
 #            --hold <ms>, --menu-style carousel|grid|moving, --theme dark|light,
-#            --font header|text|subtext[:N], --geom WxH, --scale N.
+#            --font role:face[:px][,role:face[:px]], --geom WxH, --scale N.
+#            --font faces: vt323 silk pixel jersey goth (issue #16).
 #
 # Shot mode freezes the clock at 20:36, so every scene is reproducible at
 # any time. `just golden-check` renders each scene and compares it with the
@@ -108,7 +109,12 @@ settings-display        panel --screen menu --cycle right 3 --key ok
 # one more press opens the palette list, its rows named, ACTIVE marked.
 settings-theme          panel --screen menu --cycle right 3 --key ok --key ok
 settings-font           panel --screen menu --cycle right 3 --key ok --key down --key ok
-settings-font-header32  panel --screen menu --cycle right 3 --key ok --key down --key ok --font header:1
+settings-font-header32  panel --screen menu --cycle right 3 --key ok --key down --key ok --font header:silk:32
+# Issue #16's acceptance: the SAME face (Silkscreen) at two sizes at once —
+# Headers 32 and Text 20 — and its role page, where Face and Size are two
+# independent rows.
+settings-font-sizes     panel --screen menu --cycle right 3 --key ok --key down --key ok --font header:silk:32,text:silk:20
+settings-font-role      panel --screen menu --cycle right 3 --key ok --key down --key ok --key ok --font header:silk:32
 chat-light              panel --screen chat --theme light
 menu-light              panel --screen menu --theme light
 # A new palette in situ on a rows page (issue #11): banded SURFACE, TEXT_DIM
