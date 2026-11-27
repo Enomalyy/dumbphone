@@ -77,12 +77,15 @@ key-repeat              panel --screen chat --key down --hold 1200
 # --key ok). --data pins the committed sample fixture so every thread is
 # deterministic on any machine (host/data/chats.json is real data, git-ignored).
 # conv-sam shows the delivery-mark spread (pending bar pinned to "|" in shot
-# mode, one/two dim marks, accent read marks) plus emoji and a divider;
+# mode, one/two dim marks, ON_HIGHLIGHT read marks) plus emoji and a divider;
+# conv-sam-light pins those read marks on the light palette's orange
+# bubble — where the old ACCENT marks were invisible (1.00:1);
 # conv-grandma is the Hebrew/RTL thread with a day-change divider;
 # conv-scrolled scrolls the long Book Club group thread back past its first
 # screen; conv-sms is a non-WhatsApp chat — no marks, no pending bar.
 conv-alex             panel --screen chat --data fixtures/chats.sample.json --key down 1 --key ok
 conv-sam              panel --screen chat --data fixtures/chats.sample.json --key down 2 --key ok
+conv-sam-light        panel --screen chat --data fixtures/chats.sample.json --key down 2 --key ok --theme light
 conv-grandma          panel --screen chat --data fixtures/chats.sample.json --key down 3 --key ok
 conv-scrolled         panel --screen chat --data fixtures/chats.sample.json --key down 4 --key ok --swipe up
 conv-sms              panel --screen chat --data fixtures/chats.sample.json --key down 8 --key ok

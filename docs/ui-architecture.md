@@ -243,6 +243,8 @@ Everything below runs in the Tier-1 simulator today; it is not yet compiled for 
 
 ## 10. Adding a page — the exact checklist
 
+First settle *page* vs *application* — that boundary (and why messaging is pages, not an app) is defined in `firmware-architecture.md`, § Runtime architecture.
+
 A page is data, and it touches exactly **one row in the page registry**
 (`ui_pages[]` in `ui/ui_shell.c`, §16.3). Everything the shell does with a page —
 show/hide, keymap, activate, move, swipe dispatch, the options sidebar, the

@@ -39,6 +39,17 @@ Dramatically smaller than a smartphone OS, and well inside the wheelhouse of AI-
    `on_close()`. Later ecosystem: Espressif's official `espressif/elf_loader` runs compiled
    ELF binaries straight from PSRAM — third parties drop apps onto the SD card, no reflash.
 
+## Runtime architecture — cores by criticality, pages vs applications
+
+- **Split the cores by criticality, not by feature.** One core runs LVGL + the input drain at high priority and is never allowed to block: it takes events off queues and returns. The other core runs everything that can block — the modem's AT state machine, network to the server, image decode, audio. The HAL already separates `modem`/`net`/`audio` from `display`/`input`; treat that separation as the contract for this split, not a convenience.
+- **Keep the UI resident.** Never unload it to make room for other work: the panel's owner can change, and the UI is suspended, not destroyed — rebuilding LVGL state on every handoff costs frames and invalidates object pointers.
+- **Drive the modem as an event, never poll it in a loop.** AT over UART, a task blocked on serial events, data through a ring buffer. Voice calls are cheaper than they look: the module owns the audio path and the ESP32 routes PCM rather than encoding it. Server sync is push or a long-lived connection, never a timer — a timer keeps the radio awake, and the radio is where the power goes.
+- **Decode images and audio off the drawing core.** The S3 has no hardware JPEG decoder; a 320×480 decode costs tens of milliseconds of one core, so run it on the non-UI core into a PSRAM buffer and hand the UI a ready pointer.
+- **Draw the page/application boundary as a resource question.** A *page* shares the frame: same renderer, same status/softkey bars, same keymap vocabulary, one row in `ui_pages[]`. An *application* takes the panel and saturates a core. Messaging/WhatsApp is therefore pages — it shares the frame and does not need a core; an emulator is an application.
+- **Carry foreign ESP32 software two ways, both real.** (a) A separate firmware image in flash, chosen at boot — a reboot and a slot swap. (b) An app slot inside the phone image — it takes the panel and one core, the modem and network keep running on the other, the UI is suspended, and the page is rebuilt on return.
+- **Budget feasibility with numbers; Game Boy is the worked example.** GB emulation on ESP32-S3 is solved: Peanut-GB is the common core, CrankBoy (a tuned fork) reaches ~60 fps with dynamic frame skipping, and at least one published project gives the second core to display updates. Budget: ~20–30 KB of code, ROMs from flash or SD, ~150–200 KB of hot state — tight against internal RAM, workable if the UI's working set lives in PSRAM. Flash is not the constraint (16 MB; the UI uses a fraction); **RAM is the number to watch**. Game Boy Advance / SNES: not a bet worth taking. Cite these as community results, not measurements of ours.
+- **Rely on the cheap-rebuild property for (b).** A page can be destroyed and rebuilt because a page is data plus a registry row (spec §16.3) and its data lives in the model layer (spec §16.4) — that is the payoff of those two stages.
+
 ## Server-driven UI shortcut
 
 For simple services (transit, weather, basic forms) we don't need a compiled C app at all:

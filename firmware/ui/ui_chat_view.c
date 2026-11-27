@@ -35,7 +35,6 @@
 #define C_TEXT_DIM   ui_color(UI_ROLE_TEXT_DIM)
 #define C_HIGHLIGHT  ui_color(UI_ROLE_HIGHLIGHT)
 #define C_ON_HL      ui_color(UI_ROLE_ON_HIGHLIGHT)
-#define C_ACCENT     ui_color(UI_ROLE_ACCENT)
 
 static lv_obj_t *g_root;
 static lv_obj_t *g_caret;     /* back-caret glyph in the header */
@@ -235,7 +234,7 @@ static void build_chain(void)
          * UI_TICK_H marks on the bottom edge, touching it, right-aligned
          * inside the padding. WAHA ack scale: PENDING shows nothing,
          * SERVER one dim mark, DEVICE two dim marks, READ/PLAYED two
-         * accent marks (PLAYED is rendered as READ — at this size there
+         * ON_HIGHLIGHT marks (PLAYED is rendered as READ — at this size there
          * is no room for a separate "played" glyph, and a played note
          * has at least been read). SMS chats get none of this. */
         if (m->mine && !g_sms) {
@@ -243,9 +242,12 @@ static void build_chain(void)
             if (m->ack >= UI_MSG_ACK_DEVICE) {
                 n_marks = 2;
             }
-            /* sent/delivered = TEXT_DIM, read/played = ACCENT. */
+            /* Delivery marks (spec §14.9): sent/delivered = TEXT_DIM,
+             * read/played = ON_HIGHLIGHT — the role designed for text on a
+             * C_HL bubble. ACCENT is the same orange as the light C_HL
+             * bubble: on it, the marks were invisible (1.00:1). */
             lv_color_t tick_c =
-                (m->ack >= UI_MSG_ACK_READ) ? C_ACCENT : C_TEXT_DIM;
+                (m->ack >= UI_MSG_ACK_READ) ? C_ON_HL : C_TEXT_DIM;
             for (int t = 0; t < 2; t++) {
                 g_tick[i][t] = lv_obj_create(g_bubble[i]);
                 lv_obj_remove_style_all(g_tick[i][t]);
@@ -369,10 +371,10 @@ void ui_chatview_restyle(void)
                                         m->mine ? C_ON_HL : C_TEXT, 0);
         }
         if (m && m->mine) {
-            /* sent/delivered = TEXT_DIM, read/played = ACCENT (the
-             * palette roles; the theme table owns the values). */
+            /* sent/delivered = TEXT_DIM, read/played = ON_HIGHLIGHT — the
+             * role designed for text on a C_HL bubble (spec §14.9). */
             lv_color_t tick_c =
-                (m->ack >= UI_MSG_ACK_READ) ? C_ACCENT : C_TEXT_DIM;
+                (m->ack >= UI_MSG_ACK_READ) ? C_ON_HL : C_TEXT_DIM;
             for (int t = 0; t < 2; t++) {
                 if (g_tick[i][t]) {
                     lv_obj_set_style_bg_color(g_tick[i][t], tick_c, 0);
