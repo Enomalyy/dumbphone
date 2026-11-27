@@ -24,6 +24,9 @@
 typedef enum {
     MODEL_THEME_DARK = 0,
     MODEL_THEME_LIGHT,
+    MODEL_THEME_AMBER,
+    MODEL_THEME_SLATE,
+    MODEL_THEME_MONO,
     MODEL_THEME_COUNT
 } model_theme_t;
 

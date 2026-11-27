@@ -29,10 +29,16 @@
 /* Contrast check (>= 4.5:1 for text roles; computed at palette level, which
  * is where a palette is added or edited — see the note in ui_theme.h):
  *
- *   DARK   TEXT/GROUND 13.1   TEXT/SURFACE 11.7   TEXT_DIM/GROUND 6.5
+ *   DARK   TEXT/GROUND 13.2   TEXT/SURFACE 11.7   TEXT_DIM/GROUND 6.5
  *          TEXT_DIM/SURFACE 5.8   ON_HIGHLIGHT/HIGHLIGHT 4.8
- *   LIGHT  TEXT/GROUND 16.9   TEXT/SURFACE 14.7   TEXT_DIM/GROUND 6.1
+ *   LIGHT  TEXT/GROUND 16.9   TEXT/SURFACE 14.8   TEXT_DIM/GROUND 6.1
  *          TEXT_DIM/SURFACE 5.4   ON_HIGHLIGHT/HIGHLIGHT 7.3
+ *   AMBER  TEXT/GROUND 13.4   TEXT/SURFACE 11.9   TEXT_DIM/GROUND 6.5
+ *          TEXT_DIM/SURFACE 5.7   ON_HIGHLIGHT/HIGHLIGHT 4.7
+ *   SLATE  TEXT/GROUND 13.5   TEXT/SURFACE 11.9   TEXT_DIM/GROUND 6.4
+ *          TEXT_DIM/SURFACE 5.7   ON_HIGHLIGHT/HIGHLIGHT 5.6
+ *   MONO   TEXT/GROUND 17.7   TEXT/SURFACE 15.6   TEXT_DIM/GROUND 9.4
+ *          TEXT_DIM/SURFACE 8.3   ON_HIGHLIGHT/HIGHLIGHT 11.8
  *
  * DARK is the concept-art/07 palette every golden frame was shot with; its
  * values are therefore the pre-role ones unchanged (bg/bg_alt/sel/sel_edge/
@@ -62,11 +68,47 @@ static const uint32_t g_theme_rgb[UI_THEME_COUNT][UI_ROLE_COUNT] = {
         [UI_ROLE_ACCENT_ALT]   = 0x1F6FB2,   /* light blue               */
         [UI_ROLE_ON_HIGHLIGHT] = 0x000000,   /* black: 7.3:1 on fill     */
     },
+    [UI_THEME_AMBER] = {
+        [UI_ROLE_GROUND]       = 0x241C14,   /* dark sepia               */
+        [UI_ROLE_SURFACE]      = 0x2F261B,   /* warm band                */
+        [UI_ROLE_BORDER]       = 0x8A7355,   /* tan structural grey      */
+        [UI_ROLE_TEXT]         = 0xF2E4CE,   /* warm off-white           */
+        [UI_ROLE_TEXT_DIM]     = 0xB59D7E,   /* muted tan                */
+        [UI_ROLE_ACCENT]       = 0xE8A33D,   /* amber gold               */
+        [UI_ROLE_HIGHLIGHT]    = 0x8A5A1F,   /* deep amber fill          */
+        [UI_ROLE_ACCENT_ALT]   = 0xF2C14E,   /* bright gold              */
+        [UI_ROLE_ON_HIGHLIGHT] = 0xF2E4CE,   /* = TEXT: 4.7:1 on fill    */
+    },
+    [UI_THEME_SLATE] = {
+        [UI_ROLE_GROUND]       = 0x151B22,   /* cold slate               */
+        [UI_ROLE_SURFACE]      = 0x1E2630,   /* steel band               */
+        [UI_ROLE_BORDER]       = 0x6E7F8F,   /* blue-grey structural     */
+        [UI_ROLE_TEXT]         = 0xDCE4EC,   /* cool off-white           */
+        [UI_ROLE_TEXT_DIM]     = 0x8CA0B0,   /* muted steel              */
+        [UI_ROLE_ACCENT]       = 0x5B9BD5,   /* steel blue               */
+        [UI_ROLE_HIGHLIGHT]    = 0x2E5C7A,   /* deep steel fill          */
+        [UI_ROLE_ACCENT_ALT]   = 0x6FB7E8,   /* bright steel             */
+        [UI_ROLE_ON_HIGHLIGHT] = 0xDCE4EC,   /* = TEXT: 5.6:1 on fill    */
+    },
+    [UI_THEME_MONO] = {
+        [UI_ROLE_GROUND]       = 0x0A0A0A,   /* near-black               */
+        [UI_ROLE_SURFACE]      = 0x1A1A1A,   /* charcoal band            */
+        [UI_ROLE_BORDER]       = 0x8C8C8C,   /* mid grey structural      */
+        [UI_ROLE_TEXT]         = 0xF2F2F2,   /* near-white               */
+        [UI_ROLE_TEXT_DIM]     = 0xB3B3B3,   /* light grey               */
+        [UI_ROLE_ACCENT]       = 0xE8E8E8,   /* white accent             */
+        [UI_ROLE_HIGHLIGHT]    = 0xC8C8C8,   /* light-grey fill          */
+        [UI_ROLE_ACCENT_ALT]   = 0xA6A6A6,   /* grey                     */
+        [UI_ROLE_ON_HIGHLIGHT] = 0x0A0A0A,   /* = GROUND: 11.8:1 on fill */
+    },
 };
 
 static const char *const g_theme_name[UI_THEME_COUNT] = {
     [UI_THEME_DARK]  = "DARK",
     [UI_THEME_LIGHT] = "LIGHT",
+    [UI_THEME_AMBER] = "AMBER",
+    [UI_THEME_SLATE] = "SLATE",
+    [UI_THEME_MONO]  = "MONO",
 };
 
 static const char *const g_role_name[UI_ROLE_COUNT] = {

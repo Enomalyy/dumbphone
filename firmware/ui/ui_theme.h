@@ -198,10 +198,13 @@ typedef struct {
     lv_color_t c[UI_ROLE_COUNT];
 } ui_palette_t;
 
-/* The named themes. Order is the Settings cycle order. */
+/* The named themes. Order is the Theme submenu's list order (spec §14.11). */
 typedef enum {
     UI_THEME_DARK = 0,   /* charcoal-green ground, green highlight   */
     UI_THEME_LIGHT,      /* white ground, bright-orange highlight    */
+    UI_THEME_AMBER,      /* warm sepia ground, gold accent           */
+    UI_THEME_SLATE,      /* cold slate-blue ground, steel accent     */
+    UI_THEME_MONO,       /* near-black ground, light-grey highlight  */
     UI_THEME_COUNT
 } ui_theme_id_t;
 
