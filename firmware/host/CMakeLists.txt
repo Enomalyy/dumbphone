@@ -93,6 +93,7 @@ add_executable(dumbphone-desktop
     ${FW_DIR}/model/chat_model.c
     ${FW_DIR}/model/contacts.c
     ${FW_DIR}/model/call_log.c
+    ${FW_DIR}/model/messages.c
     ${FW_DIR}/model/settings.c
 )
 
@@ -134,6 +135,7 @@ add_executable(test-host
     ${FW_DIR}/ui/ui_text.c
     ${FW_DIR}/ui/ui_geometry.c
     ${FW_DIR}/model/chat_model.c
+    ${FW_DIR}/model/messages.c
     ${FW_DIR}/model/settings.c
     src/hal_stubs.c
 )
