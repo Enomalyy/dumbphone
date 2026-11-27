@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>dumbphone — the real firmware in your browser</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #070a08; overflow: hidden; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center;
+         font-family: ui-monospace, "Cascadia Mono", monospace; gap: 12px; }
+  canvas { order: 1; image-rendering: pixelated; touch-action: none; }
+  #caption { order: 2; color: #8fa391; font-size: 12px; letter-spacing: .08em;
+             text-transform: uppercase; opacity: .8; text-align: center; padding: 0 14px; }
+  #webtest-log { order: 4; color: #9fd8a0; font-size: 11px;
+                 white-space: pre-wrap; max-width: 92vw; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="caption">dumbphone — the real firmware, running in your browser · tap the keys</div>
+<script>
+/* Pre-loader: must run BEFORE dumbphone.js.
+ *
+ * Emscripten 7 no longer auto-detects <canvas id="canvas"> (the old
+ * Browser.init is gone); SDL's emscripten port reads Module['canvas'] for
+ * its 2D blit surface, so we hand it to the runtime explicitly.
+ * noExitRuntime: main() returns after init — the page's rAF loop keeps
+ * pumping web_frame_pump() (see web_hooks.c). */
+window.Module = window.Module || {};
+window.Module.canvas = document.getElementById("canvas");
+window.Module.noExitRuntime = true;
+</script>
+<script src="dumbphone.js"></script>
+<script>
+/* Boot + optional ?test=1 headless self-test.
+ *
+ * Readiness ping: when the URL carries ready=<token> (added by
+ * web/tools/ready_server.py), the page pings /__ready?token=… once it has
+ * booted — immediately in normal mode, only after the test sequence in
+ * ?test=1 mode. That lets a headless screenshot (which fires at the load
+ * event) capture a fully booted app. On a plain static host the ping 404s
+ * harmlessly.
+ *
+ * ?test=1 drives bezel taps through the same DOM path a visitor's finger
+ * uses (dispatched mouse events on the canvas), then hashes the panel
+ * framebuffer before/after to prove the UI actually responded. Result:
+ * document.title becomes DUMBPHONE-WEB-PASS / -FAIL, and the log is written
+ * into #webtest-log for screenshots. */
+(function () {
+  const params = new URLSearchParams(location.search);
+  const isTest = params.has("test");
+  const readyToken = params.get("ready");
+
+  /* The composed window's native size (window pixels at scale 1.0 on the
+   * web build). Queried from C — the page must NOT hardcode a panel geometry
+   * (spec §15 / issue #1): it follows whatever --geom produced. */
+  function winSize(M) {
+    const p = M._malloc(8);
+    try {
+      M.ccall("web_window_size", "number", ["number", "number"], [p, p + 4]);
+      const a = new Int32Array(M.HEAPU8.buffer, p);
+      return [a[0], a[1]];
+    } finally { M._free(p); }
+  }
+
+  /* Fit the phone (the logical bezel window) into the viewport, aspect
+   * preserved. The SDL port finds this #canvas element and sizes its
+   * backing store; CSS display size is ours to control. */
+  function fitCanvas(M) {
+    const c = document.getElementById("canvas");
+    if (!c || !M) return;
+    const W = winSize(M)[0], H = winSize(M)[1];
+    /* test mode: keep the phone at native size so the log fits below it */
+    const cap = isTest ? 1.0 : Infinity;
+    const s = Math.min(window.innerWidth / W, (window.innerHeight - 64) / H, cap);
+    c.style.width = Math.round(W * s) + "px";
+    c.style.height = Math.round(H * s) + "px";
+  }
+  window.addEventListener("resize", () => fitCanvas(window.Module));
+
+  /* The page owns the pump loop: one web_frame_pump() per animation frame.
+   * (Emscripten 7's built-in rAF wrappers never fired their C callback in
+   * our verification environment; a plain page-side rAF + ccall runs at a
+   * steady 60fps — see web_hooks.c.) */
+  function startPump(M) {
+    let alive = true;
+    (function tick() {
+      if (!alive) return;
+      try {
+        if (!M.ccall("web_frame_pump", "number", [], [])) { alive = false; return; }
+      } catch (e) {
+        console.error("pump error:", e);
+      }
+      requestAnimationFrame(tick);
+    })();
+  }
+
+  /* stage=final releases the verification server's gate; earlier stages are
+   * logged there for diagnostics. No-op on a plain static host. */
+  function pingReady(stage) {
+    if (!readyToken) return;
+    const go = () => fetch("/__ready?token=" + encodeURIComponent(readyToken) +
+      "&stage=" + encodeURIComponent(stage || "final")).catch(() => {});
+    if (stage === "final") {
+      /* One extra frame so any log text is painted before the screenshot. */
+      requestAnimationFrame(() => setTimeout(go, 150));
+    } else go();
+  }
+
+  if (!isTest) {
+    const boot = () => {
+      startPump(window.Module);
+      /* main() runs right after onRuntimeInitialized; give it a beat. */
+      setTimeout(() => { fitCanvas(window.Module); pingReady("final"); }, 1500);
+    };
+    if (window.Module) Module.onRuntimeInitialized = boot;
+    else setInterval(() => { if (window.Module) Module.onRuntimeInitialized = boot; }, 50);
+    return;
+  }
+
+  /* ---------- ?test=1 harness ---------- */
+
+  const logEl = document.createElement("pre");
+  logEl.id = "webtest-log";
+  document.body.appendChild(logEl);
+  const lines = [];
+  function log(msg) {
+    lines.push(msg);
+    logEl.textContent = lines.join("\n");
+    console.log("[webtest] " + msg);
+  }
+
+  /* Count canvas mousedowns so the harness can report DOM delivery. */
+  window.__mdown = 0;
+  document.addEventListener("mousedown", e => {
+    if (e.target && e.target.tagName === "CANVAS") window.__mdown++;
+  }, true);
+
+  /* Collect console errors so the harness can report them in its verdict. */
+  const errs = [];
+  const origErr = console.error.bind(console);
+  console.error = (...a) => { errs.push(a.map(String).join(" ")); origErr(...a); };
+
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  async function run(M) {
+    startPump(M);
+    fitCanvas(M);
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("no canvas element");
+
+    const hash = () => M.ccall("web_frame_hash", "number", [], []);
+
+    /* Tap a named bezel key at its exact centre. Logical window units come
+     * from C (web_window_size); the canvas CSS size equals the logical
+     * window size, so the mapping is a uniform scale — same math SDL's port
+     * uses. */
+    const [WW, HH] = winSize(M);
+    const tapKey = (id) => {
+      const p = M._malloc(8);
+      try {
+        if (M.ccall("web_key_center", "number", ["string", "number", "number"], [id, p, p + 4]) !== 0)
+          throw new Error("unknown key " + id);
+        const cx = new Int32Array(M.HEAPU8.buffer, p)[0];
+        const cy = new Int32Array(M.HEAPU8.buffer, p + 4)[0];
+        const r = canvas.getBoundingClientRect();
+        const x = r.left + cx * (r.width / WW);
+        const y = r.top + cy * (r.height / HH);
+        /* SDL's button events carry the CURRENT mouse position, which only
+         * a motion event updates — move first, then press. */
+        canvas.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0 }));
+        return sleep(60).then(() => {
+          for (const type of ["pointerdown", "mousedown"]) {
+            canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: 1 }));
+          }
+          return sleep(80);
+        }).then(() => {
+          for (const type of ["pointerup", "mouseup"]) {
+            canvas.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0, buttons: 0 }));
+          }
+        });
+      } finally { M._free(p); }
+    };
+
+    await sleep(1500);                       /* let a few frames render */
+    const h_home = hash();
+    log("home   frame=" + h_home.toString(16));
+
+    tapKey("ok");                            /* HOME -> main menu carousel */
+    await sleep(700);
+    const h_menu = hash();
+    log("menu   frame=" + h_menu.toString(16) + " mdown=" + window.__mdown);
+
+    /* Second press via the C-side HAL queue (bypasses DOM delivery) so the
+     * run isolates DOM event handling from C input handling. */
+    M.ccall("web_press_key", "number", ["string"], ["right"]);
+    await sleep(700);
+    const h_next = hash();
+    log("next   frame=" + h_next.toString(16) + " mdown=" + window.__mdown
+        + " frames=" + M.ccall("web_frame_count", "number", [], []));
+
+    const ok = h_menu !== h_home && h_next !== h_menu;
+    log("console errors: " + (errs.length ? errs.join(" | ") : "none"));
+    log(ok ? "WEBTEST-PASS" : "WEBTEST-FAIL");
+    document.title = "DUMBPHONE-WEB-" + (ok ? "PASS" : "FAIL");
+  }
+
+  /* The loader script defines window.Module synchronously;
+   * onRuntimeInitialized fires right before main() runs, so the harness's
+   * initial settle covers boot + first frames. The readiness ping goes out
+   * only after the verdict is on screen. */
+  const boot = () => {
+    return run(window.Module)
+      .then(pingReady)
+      .catch(e => {
+        log("harness error: " + e);
+        document.title = "DUMBPHONE-WEB-FAIL";
+        pingReady();
+      });
+  };
+
+  if (window.Module) {
+    Module.onRuntimeInitialized = boot;
+  } else {
+    setInterval(() => { if (window.Module) Module.onRuntimeInitialized = boot; }, 50);
+  }
+})();
+</script>
+</body>
+</html>
