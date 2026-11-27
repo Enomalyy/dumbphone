@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ui/chat_model.h"
+#include "model/chat_model.h"
 
 #ifndef CHAT_DATA_PATH
 #define CHAT_DATA_PATH "data/chats.json"

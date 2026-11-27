@@ -11,12 +11,16 @@
  * page's own keymap. Rows are inert (target PAGE_NONE) — opening a call or
  * composing a number is a later leg (charter scope: stubs are fine).
  *
- * The data is static mock, in the spirit of chats.json: it stands in for the
- * on-device store until the WAHA backbone lands (spec §9).
+ * The data lives in the model layer (model/call_log.c, model/contacts.c,
+ * spec §16.4): static mock for now, standing in for the on-device store until
+ * the WAHA backbone lands (spec §9). These pages read it through the
+ * accessors and never own a copy.
  */
 
 #include <stddef.h>
 
+#include "model/call_log.h"
+#include "model/contacts.h"
 #include "ui/ui_calls.h"
 #include "ui/ui_icons.h"
 #include "ui/ui_keymap.h"
@@ -35,31 +39,15 @@ static const keymap_t km_calls = {
 /* Call History — recent calls, two-line rows like the chat list.     */
 /* ------------------------------------------------------------------ */
 
-typedef struct {
-    const char *name;
-    const char *dir;    /* incoming | outgoing | missed        */
-    const char *time;   /* short: fits the renderer's meta col  */
-} call_entry_t;
-
-#define N_CALLS ((int)(sizeof g_calls / sizeof g_calls[0]))
-
-static const call_entry_t g_calls[] = {
-    { "Mom",       "incoming", "09:12"      },
-    { "Dad",       "outgoing", "08:47"      },
-    { "Work",      "missed",   "08:30"      },
-    { "Netanel",   "incoming", "yest 21:04" },
-    { "Doctor",    "outgoing", "yest 09:15" },
-    { "Rina",      "missed",   "mon 18:22"  },
-    { "School",    "incoming", "sun 10:05"  },
-    { "Shmuel",    "outgoing", "fri 16:40"  },
-};
-
-static menu_item_t g_hist_items[N_CALLS];
+/* The row pool is sized for the model's cap; the live count comes from the
+ * model at page build time (fill_history), so real data (spec §9) needs no
+ * page change. */
+static menu_item_t g_hist_items[MODEL_CALLS_MAX];
 
 static menu_t g_hist_page = {
     .title   = "CALL HISTORY",
     .items   = g_hist_items,
-    .n_items = N_CALLS,
+    .n_items = MODEL_CALLS_MAX,   /* fixed up by fill_history() */
     .sel     = 0,
     .cats    = NULL,
     .n_cats  = 0,
@@ -71,11 +59,16 @@ static menu_t g_hist_page = {
  * the meta column (the renderer draws both from the same structure). */
 static void fill_history(void)
 {
-    for (int i = 0; i < N_CALLS; i++) {
-        g_hist_items[i].label  = g_calls[i].name;
-        g_hist_items[i].sub    = g_calls[i].dir;
+    int n = model_calls_count();
+    if (n > MODEL_CALLS_MAX) {
+        n = MODEL_CALLS_MAX;
+    }
+    g_hist_page.n_items = (uint8_t)n;
+    for (int i = 0; i < n; i++) {
+        g_hist_items[i].label  = model_call_name(i);
+        g_hist_items[i].sub    = model_call_dir(i);
         g_hist_items[i].icon   = I_PHONE;
-        g_hist_items[i].meta   = g_calls[i].time;
+        g_hist_items[i].meta   = model_call_time(i);
         g_hist_items[i].target = PAGE_NONE;   /* opening a call: later leg */
     }
 }
@@ -90,33 +83,15 @@ menu_t *ui_calls_history_page(void)
 /* Contacts — name + number (number in the meta column).              */
 /* ------------------------------------------------------------------ */
 
-typedef struct {
-    const char *name;
-    const char *num;    /* short: fits the renderer's meta col  */
-} contact_entry_t;
-
-#define N_CONTACTS ((int)(sizeof g_contacts / sizeof g_contacts[0]))
-
-/* Numbers are hyphen-free: the renderer's meta column is 104 px (UI_ROW_META_W), and a
- * hyphen is a word-break opportunity for LVGL text layout — an 11-char
- * "052-1234567" wrapped to two lines. Ten digits fit one line (verified). */
-static const contact_entry_t g_contacts[] = {
-    { "Mom",       "0521234567" },
-    { "Dad",       "0549876543" },
-    { "Netanel",   "0501112223" },
-    { "Work",      "026234567"  },
-    { "Doctor",    "0587778889" },
-    { "School",    "025301234"  },
-    { "Rina",      "0534445556" },
-    { "Shmuel",    "0592223334" },
-};
-
-static menu_item_t g_contact_items[N_CONTACTS];
+/* The row pool is sized for the model's cap; the live count comes from the
+ * model at page build time (fill_contacts; numbers stay hyphen-free — see
+ * model/contacts.c). */
+static menu_item_t g_contact_items[MODEL_CONTACTS_MAX];
 
 static menu_t g_contact_page = {
     .title   = "CONTACTS",
     .items   = g_contact_items,
-    .n_items = N_CONTACTS,
+    .n_items = MODEL_CONTACTS_MAX,   /* fixed up by fill_contacts() */
     .sel     = 0,
     .cats    = NULL,
     .n_cats  = 0,
@@ -126,10 +101,15 @@ static menu_t g_contact_page = {
 
 static void fill_contacts(void)
 {
-    for (int i = 0; i < N_CONTACTS; i++) {
-        g_contact_items[i].label  = g_contacts[i].name;
+    int n = model_contacts_count();
+    if (n > MODEL_CONTACTS_MAX) {
+        n = MODEL_CONTACTS_MAX;
+    }
+    g_contact_page.n_items = (uint8_t)n;
+    for (int i = 0; i < n; i++) {
+        g_contact_items[i].label  = model_contact_name(i);
         g_contact_items[i].icon   = I_USER;
-        g_contact_items[i].meta   = g_contacts[i].num;
+        g_contact_items[i].meta   = model_contact_number(i);
         g_contact_items[i].target = PAGE_NONE;   /* no compose screen yet */
     }
 }

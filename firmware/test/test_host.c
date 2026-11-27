@@ -13,7 +13,11 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
+#include "hal/hal_storage.h"
+#include "model/chat_model.h"
+#include "model/settings.h"
 #include "ui/ui_geometry.h"
 #include "ui/ui_input.h"
 #include "ui/ui_text.h"
@@ -160,11 +164,165 @@ static void test_key_repeat(void)
     CHECK(iv == UI_KEY_REPEAT_MIN_MS, "repeat: floor holds at 40");
 }
 
+/* ------------------------------------------------------------------ */
+/* model_chats_slice — the per-category slice builder (spec §16.4).   */
+/* The UI's chat list reads its rows from here; these checks pin the  */
+/* contract: order, membership, caps, synthetic rows, empty state.    */
+/* ------------------------------------------------------------------ */
+
+static void test_model_chats(void)
+{
+    ui_chat_list_t list = {
+        .count = 4,
+        .archived_count = 5,
+        .chats = {
+            [0] = { .name = "A", .unread = 2, .family = true },
+            [1] = { .name = "B", .favorite = true },
+            [2] = { .name = "C", .unread = 1, .family = true,
+                    .favorite = true },
+            [3] = { .name = "D" },
+        },
+    };
+
+    model_chat_row_t rows[UI_CHAT_MAX + 2];
+
+    /* ALL: every chat in order, then the trailing New Chat row. */
+    int n = model_chats_slice(&list, MODEL_CHAT_CAT_ALL, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 5, "slice ALL: 4 chats + New Chat");
+    CHECK(rows[0].kind == MODEL_CHAT_ROW_CHAT && rows[0].chat == &list.chats[0],
+          "slice ALL: row 0 is chat A");
+    CHECK(rows[3].kind == MODEL_CHAT_ROW_CHAT && rows[3].chat == &list.chats[3],
+          "slice ALL: row 3 is chat D");
+    CHECK(rows[4].kind == MODEL_CHAT_ROW_NEW_CHAT && rows[4].chat == NULL,
+          "slice ALL: trailing New Chat row");
+
+    /* FAMILY / UNREAD / FAVORITES: membership by flag, list order kept. */
+    n = model_chats_slice(&list, MODEL_CHAT_CAT_FAMILY, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 2 && rows[0].chat == &list.chats[0] && rows[1].chat == &list.chats[2],
+          "slice FAMILY: A and C");
+
+    n = model_chats_slice(&list, MODEL_CHAT_CAT_UNREAD, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 2 && rows[0].chat == &list.chats[0] && rows[1].chat == &list.chats[2],
+          "slice UNREAD: A and C");
+
+    n = model_chats_slice(&list, MODEL_CHAT_CAT_FAVORITES, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 2 && rows[0].chat == &list.chats[1] && rows[1].chat == &list.chats[2],
+          "slice FAVORITES: B and C");
+
+    /* ARCHIVED: one summary row carrying the count. */
+    n = model_chats_slice(&list, MODEL_CHAT_CAT_ARCHIVED, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 1 && rows[0].kind == MODEL_CHAT_ROW_ARCHIVED,
+          "slice ARCHIVED: one summary row");
+    CHECK(rows[0].archived_count == 5, "slice ARCHIVED: count carried");
+
+    /* The cap drops the overflow (and the New Chat row when full). */
+    n = model_chats_slice(&list, MODEL_CHAT_CAT_ALL, rows, 3);
+    CHECK(n == 3 && rows[2].kind == MODEL_CHAT_ROW_CHAT && rows[2].chat == &list.chats[2],
+          "slice ALL cap=3: A B C, no New Chat");
+
+    /* Empty list (source loaded, zero chats): ALL is just New Chat; */
+    /* ARCHIVED has no summary row.                                 */
+    ui_chat_list_t empty = { .count = 0, .archived_count = 0 };
+    n = model_chats_slice(&empty, MODEL_CHAT_CAT_ALL, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 1 && rows[0].kind == MODEL_CHAT_ROW_NEW_CHAT,
+          "slice ALL empty list: New Chat only");
+    n = model_chats_slice(&empty, MODEL_CHAT_CAT_ARCHIVED, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 0, "slice ARCHIVED empty list: no rows");
+
+    /* NULL list (source unavailable): one honest NO_DATA row. */
+    n = model_chats_slice(NULL, MODEL_CHAT_CAT_ALL, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 1 && rows[0].kind == MODEL_CHAT_ROW_NO_DATA,
+          "slice ALL null list: NO_DATA row");
+    n = model_chats_slice(NULL, MODEL_CHAT_CAT_UNREAD, rows, UI_CHAT_MAX + 2);
+    CHECK(n == 1 && rows[0].kind == MODEL_CHAT_ROW_NO_DATA,
+          "slice UNREAD null list: NO_DATA row");
+
+    /* Unread total feeds HOME's widget. */
+    CHECK(model_chats_unread_total(&list) == 3, "unread total: 2+0+1+0 = 3");
+    CHECK(model_chats_unread_total(NULL) == 0, "unread total: null -> 0");
+}
+
+/* ------------------------------------------------------------------ */
+/* model settings — the round-trip through hal_storage (spec §16.4).  */
+/* Mutate, save, wipe memory, load: every value must come back. The    */
+/* parser's leniency is pinned too: unknown keys ignored, missing     */
+/* keys keep factory values, bad versions void the file.              */
+/* ------------------------------------------------------------------ */
+
+static void test_model_settings(void)
+{
+    /* The test process starts at the factory defaults. */
+    model_settings_reset();
+    const model_settings_t *s = model_settings();
+    CHECK(s->softkeys == true, "settings: factory softkeys on");
+    CHECK(s->menu_style == MODEL_MENU_CAROUSEL, "settings: factory menu carousel");
+    CHECK(strcmp(s->speeddial[0], "Mom") == 0, "settings: factory dial 0 Mom");
+
+    /* Mutate the live state (each mutator also saves). */
+    model_settings_set_menu_style(MODEL_MENU_GRID);
+    model_settings_set_theme(MODEL_THEME_LIGHT);
+    model_settings_set_softkeys(false);
+    model_settings_set_font(1, 3, 20);
+    model_settings_set_speeddial(2, "Work");
+    model_settings_cycle_heldpress(1);   /* slot 1: none -> new message */
+
+    CHECK(model_settings_save() == 0, "settings: save ok");
+
+    /* Wipe the in-memory state and restore it from storage. */
+    model_settings_reset();
+    CHECK(model_settings()->menu_style == MODEL_MENU_CAROUSEL,
+          "settings: reset back to factory");
+    CHECK(model_settings_load() == 0, "settings: load ok");
+    s = model_settings();
+    CHECK(s->menu_style == MODEL_MENU_GRID, "settings: menu style round-trip");
+    CHECK(s->theme == MODEL_THEME_LIGHT, "settings: theme round-trip");
+    CHECK(s->softkeys == false, "settings: softkeys round-trip");
+    CHECK(s->fonts[1].face == 3 && s->fonts[1].px == 20,
+          "settings: font round-trip");
+    CHECK(strcmp(s->speeddial[2], "Work") == 0, "settings: speeddial round-trip");
+    CHECK(s->heldpress[1] == MODEL_HP_NEW_MESSAGE, "settings: heldpress round-trip");
+
+    /* Lenient parsing: unknown keys ignored, out-of-range values rejected,
+     * missing keys keep their factory value. */
+    const char *lenient =
+        "1\n"
+        "menu_style=2\n"
+        "bogus_key=whatever\n"
+        "theme=99\n"          /* out of range: ignored              */
+        "font_text=4:16\n";
+    CHECK(hal_storage_write_file(HAL_STORAGE_USER, "settings", lenient,
+                                 strlen(lenient)) == 0,
+          "settings: wrote lenient file");
+    model_settings_reset();
+    model_settings_load();
+    s = model_settings();
+    CHECK(s->menu_style == MODEL_MENU_MOVING, "settings: lenient menu style parsed");
+    CHECK(s->theme == MODEL_THEME_DARK, "settings: out-of-range theme ignored");
+    CHECK(s->fonts[1].face == 4 && s->fonts[1].px == 16,
+          "settings: lenient font parsed");
+    CHECK(strcmp(s->speeddial[0], "Mom") == 0, "settings: missing keys keep factory");
+
+    /* A bad version voids the whole file. */
+    const char *badver = "2\nmenu_style=1\n";
+    hal_storage_write_file(HAL_STORAGE_USER, "settings", badver,
+                           strlen(badver));
+    model_settings_reset();
+    model_settings_load();
+    CHECK(model_settings()->menu_style == MODEL_MENU_CAROUSEL,
+          "settings: bad version re-seeds factory");
+
+    /* Leave no trace: the live app must boot with the factory state. */
+    hal_storage_remove(HAL_STORAGE_USER, "settings");
+    model_settings_reset();
+}
+
 int main(void)
 {
     test_ui_text();
     test_ui_geometry();
     test_key_repeat();
+    test_model_chats();
+    test_model_settings();
 
     printf("test-host: %d passed, %d failed\n", n_pass, n_fail);
     if (n_fail > 0) {

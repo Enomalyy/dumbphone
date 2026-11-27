@@ -9,6 +9,7 @@
 
 #include <stdio.h>
 
+#include "model/settings.h"
 #include "ui/ui_geometry.h"
 
 #define GEOM_MIN_W   120
@@ -17,7 +18,8 @@
 
 static int g_w = 320;
 static int g_h = 480;
-static bool g_softkeys = true;   /* the legend is visible by default */
+/* The softkey-bar flag is model state (spec §16.4); the derived metrics
+ * below read it through ui_geom_softkeys(). */
 
 static int clampi(int v, int lo, int hi)
 {
@@ -57,17 +59,17 @@ int ui_status_h(void)
 
 void ui_geometry_set_softkeys(bool shown)
 {
-    g_softkeys = shown;
+    model_settings_set_softkeys(shown);
 }
 
 bool ui_geom_softkeys(void)
 {
-    return g_softkeys;
+    return model_settings()->softkeys;
 }
 
 int ui_softkey_h(void)
 {
-    return g_softkeys ? scale_h(36, 28, 54) : 0;
+    return ui_geom_softkeys() ? scale_h(36, 28, 54) : 0;
 }
 
 int ui_content_y(void)

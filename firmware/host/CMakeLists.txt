@@ -90,6 +90,10 @@ add_executable(dumbphone-desktop
     ${FW_DIR}/ui/ui_speeddial.c
     ${FW_DIR}/ui/ui_heldpress.c
     ${FW_DIR}/ui/ui_calls.c
+    ${FW_DIR}/model/chat_model.c
+    ${FW_DIR}/model/contacts.c
+    ${FW_DIR}/model/call_log.c
+    ${FW_DIR}/model/settings.c
 )
 
 target_include_directories(dumbphone-desktop PRIVATE
@@ -129,6 +133,9 @@ add_executable(test-host
     ${FW_DIR}/test/test_host.c
     ${FW_DIR}/ui/ui_text.c
     ${FW_DIR}/ui/ui_geometry.c
+    ${FW_DIR}/model/chat_model.c
+    ${FW_DIR}/model/settings.c
+    src/hal_stubs.c
 )
 target_include_directories(test-host PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include

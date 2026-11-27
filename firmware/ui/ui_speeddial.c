@@ -2,10 +2,11 @@
  * ui_speeddial.c — HOME speed dials (spec §2) + their settings sub-page.
  *
  * Nine slots, one per T9 key 1..9. Each slot holds a contact name; an empty
- * slot is inert. State is static and in-memory (no persistence yet — spec
- * §9). A slot's name cycles through a fixed preset list, so configuring a
- * dial works without a text keyboard: CENTER on the sub-page row advances
- * the slot to the next preset (wrapping back to empty).
+ * slot is inert. The names live in the model layer (model/settings.c,
+ * spec §16.4) and persist through hal_storage. A slot's name cycles through
+ * a fixed preset list, so configuring a dial works without a text keyboard:
+ * CENTER on the sub-page row advances the slot to the next preset (wrapping
+ * back to empty).
  *
  * The sub-page is one canonical menu_t (ui_menu.h): one row per slot, the
  * live name in the row label — the exact pattern of the settings tree
@@ -13,48 +14,25 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 
+#include "model/settings.h"
 #include "ui/ui_speeddial.h"
 #include "ui/ui_icons.h"
 #include "ui/ui_keymap.h"
 
-/* Preset names a slot can take, in cycle order (wraps back to empty). */
-static const char *const g_presets[] = {
-    "", "Mom", "Dad", "Work", "Doctor", "School", "Friend", "Family", "Emergency",
-};
-#define N_PRESETS ((int)(sizeof g_presets / sizeof g_presets[0]))
-
-/* The nine slots. Seeded with two dials so the feature is visible out of
- * the box (mock data, in the spirit of chats.json). */
-static char g_dials[SPEEDDIAL_N][16] = {
-    [0] = "Mom",
-    [1] = "Dad",
-};
-
 const char *ui_speeddial_name(uint8_t i)
 {
-    return i < SPEEDDIAL_N ? g_dials[i] : "";
+    return i < SPEEDDIAL_N ? model_settings()->speeddial[i] : "";
 }
 
 bool ui_speeddial_set(uint8_t i)
 {
-    return i < SPEEDDIAL_N && g_dials[i][0] != '\0';
+    return i < SPEEDDIAL_N && model_settings()->speeddial[i][0] != '\0';
 }
 
 void ui_speeddial_cycle(uint8_t i)
 {
-    if (i >= SPEEDDIAL_N) {
-        return;
-    }
-    int cur = 0;   /* unknown name (cannot happen): treat as empty */
-    for (int p = 0; p < N_PRESETS; p++) {
-        if (strcmp(g_dials[i], g_presets[p]) == 0) {
-            cur = p;
-            break;
-        }
-    }
-    snprintf(g_dials[i], sizeof g_dials[i], "%s", g_presets[(cur + 1) % N_PRESETS]);
+    model_settings_cycle_speeddial(i);
 }
 
 /* ------------------------------------------------------------------ */
@@ -93,7 +71,8 @@ static menu_t g_page = {
 static void refresh_rows(void)
 {
     for (int i = 0; i < SPEEDDIAL_N; i++) {
-        g_items[i].label  = g_dials[i][0] ? g_dials[i] : g_empty_lbl;
+        const char *name = model_settings()->speeddial[i];
+        g_items[i].label  = name[0] ? name : g_empty_lbl;
         g_items[i].icon   = I_USER;
         g_items[i].target = PAGE_NONE;   /* activation = cycle, not a page */
     }

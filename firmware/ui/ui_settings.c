@@ -31,12 +31,14 @@
  *              Text
  *              Subtext
  *
- * State is static, in-memory: no persistence yet (spec §9 — the local store
- * arrives with the WAHA backbone).
+ * This page is a READER + WRITER for the settings state: every value lives
+ * in the model layer (model/settings.c, spec §16.4), which persists it
+ * through hal_storage.
  */
 
 #include <stdio.h>
 
+#include "model/settings.h"
 #include "ui/ui_settings.h"
 #include "ui/ui_icons.h"
 #include "ui/ui_keymap.h"
@@ -50,9 +52,8 @@
 static const char *const g_menu_style_vals[] = { "CAROUSEL", "GRID", "MOVING" };
 static const char *const g_call_pref_vals[]  = { "WHATSAPP", "STANDARD" };
 
-/* In-memory state (no persistence yet). */
-static uint8_t g_menu_style = MENU_STYLE_CAROUSEL;
-static uint8_t g_call_pref  = CALL_PREF_WHATSAPP;
+/* The live values live in the model layer (spec §16.4); this page reads
+ * them through model_settings() and writes through its mutators. */
 
 /* This page's contextual keymap: back with shoulder-R, home with END,
  * up/down moves the selection, CENTER toggles the selected setting. */
@@ -159,12 +160,14 @@ static void refresh_font_meta(void)
 
 static void refresh_values(void)
 {
-    g_items[SETTING_CALL_PREF].meta = g_call_pref_vals[g_call_pref];
+    const model_settings_t *s = model_settings();
+
+    g_items[SETTING_CALL_PREF].meta = g_call_pref_vals[s->call_pref];
 
     g_disp_items[DISPLAY_THEME].meta =
         ui_theme_name((ui_theme_id_t)(ui_theme_get() == UI_THEME_DARK ? 0 : 1));
 
-    g_disp_items[DISPLAY_MENU_STYLE].meta = g_menu_style_vals[g_menu_style];
+    g_disp_items[DISPLAY_MENU_STYLE].meta = g_menu_style_vals[s->menu_style];
 
     g_disp_items[DISPLAY_SOFTKEYS].meta =
         g_softkey_vals[ui_geom_softkeys() ? 0 : 1];
@@ -199,8 +202,11 @@ ui_setting_effect_t ui_settings_activate(uint8_t sel)
     if (sel >= N_SETTINGS) {
         return UI_SETTING_EFFECT_NONE;
     }
+    const model_settings_t *s = model_settings();
     switch (sel) {
-    case SETTING_CALL_PREF: g_call_pref ^= 1; break;
+    case SETTING_CALL_PREF:
+        model_settings_set_call_pref(s->call_pref ^ 1);
+        break;
     default:                return UI_SETTING_EFFECT_NONE;  /* navigable */
     }
     refresh_values();
@@ -212,6 +218,7 @@ ui_setting_effect_t ui_settings_display_activate(uint8_t sel)
     if (sel >= N_DISPLAY_SETTINGS) {
         return UI_SETTING_EFFECT_NONE;
     }
+    const model_settings_t *s = model_settings();
     ui_setting_effect_t effect = UI_SETTING_EFFECT_NONE;
 
     switch (sel) {
@@ -225,12 +232,13 @@ ui_setting_effect_t ui_settings_display_activate(uint8_t sel)
     case DISPLAY_FONT:
         return UI_SETTING_EFFECT_NONE;   /* navigable row */
     case DISPLAY_MENU_STYLE:
-        g_menu_style = (uint8_t)((g_menu_style + 1) % 3);
-        ui_settings_set_menu_style(g_menu_style);
+        uint8_t next = (uint8_t)((s->menu_style + 1) % 3);
+        model_settings_set_menu_style(next);
+        ui_settings_set_menu_style(next);   /* main menu rebuilds itself */
         effect = UI_SETTING_EFFECT_MENU_STYLE;
         break;
     case DISPLAY_SOFTKEYS:
-        ui_geometry_set_softkeys(!ui_geom_softkeys());
+        ui_geometry_set_softkeys(!s->softkeys);
         effect = UI_SETTING_EFFECT_SOFTKEYS;
         break;
     default:
@@ -253,10 +261,12 @@ ui_setting_effect_t ui_settings_font_activate(uint8_t sel)
     return UI_SETTING_EFFECT_FONT;
 }
 
-uint8_t ui_settings_menu_style(void) { return g_menu_style; }
+uint8_t ui_settings_menu_style(void) { return model_settings()->menu_style; }
 
 void ui_settings_set_menu_style(uint8_t style)
 {
-    g_menu_style = (style == MENU_STYLE_GRID || style == MENU_STYLE_MOVING)
-                       ? style : MENU_STYLE_CAROUSEL;
+    if (style != MENU_STYLE_GRID && style != MENU_STYLE_MOVING) {
+        style = MENU_STYLE_CAROUSEL;
+    }
+    model_settings_set_menu_style(style);
 }

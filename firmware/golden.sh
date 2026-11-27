@@ -56,6 +56,10 @@ while IFS= read -r line || [ -n "$line" ]; do
     [ -n "${flags_str:-}" ] || flags_str=""
 
     n=$((n + 1))
+    # Fresh user storage per scene: settings persist through hal_storage
+    # (spec §16.4), so a state-changing scene must not leak into the next.
+    rm -rf "$FW_DIR/data/user"
+
     shot_flag=--shot
     [ "$kind" = window ] && shot_flag=--shot-win
 

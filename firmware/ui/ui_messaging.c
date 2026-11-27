@@ -2,12 +2,15 @@
  * ui_messaging.c — Messaging: the unified WhatsApp chat list (spec §2).
  *
  * The chat list is a PAGE reached from the main menu's MESSAGING category —
- * not HOME. Owns: the chat data adapter (the target's chat source resolved
- * into per-category item slices), the page's menu_t + its contextual keymap,
- * and the category cycling. Exposes: ui_messaging_build / ui_messaging_page /
- * ui_messaging_keymap / ui_messaging_cycle_cat / ui_messaging_unread_total
- * (ui_messaging.h). Must not touch: navigation state, the screen stack, key
- * routing — those live in ui_shell.c; appearance in ui_theme.h + ui_menu.c.
+ * not HOME. Owns: the page's menu_t + its contextual keymap, the category
+ * cycling, and the row PRESENTATION (text store, icons, "You:" prefixes).
+ * The data itself lives in the model layer (model/chat_model.c, spec
+ * §16.4): the per-category slice builder resolves the target's chat source
+ * into rows; this page maps each row to its menu_item_t. Exposes:
+ * ui_messaging_build / ui_messaging_page / ui_messaging_keymap /
+ * ui_messaging_cycle_cat / ui_messaging_unread_total (ui_messaging.h). Must
+ * not touch: navigation state, the screen stack, key routing — those live in
+ * ui_shell.c; appearance in ui_theme.h + ui_menu.c.
  */
 
 #include <stdint.h>
@@ -16,7 +19,7 @@
 
 #include "lvgl.h"
 
-#include "chat_model.h"
+#include "model/chat_model.h"
 #include "ui_icons.h"
 #include "ui_keymap.h"
 #include "ui_menu.h"
@@ -102,8 +105,11 @@ static void add_chat_item(int cat, const ui_chat_t *c, int tidx)
     it->target = PAGE_NONE;   /* opening a conversation: later leg */
 }
 
-/* Resolve the chat source into per-category item slices. ALL gets every
- * chat plus a trailing New Chat row; ARCHIVED is one summary row. */
+/* Resolve the chat source into per-category item slices. The MODEL owns the
+ * slicing (model_chats_slice, spec §16.4): ALL gets every chat plus a
+ * trailing New Chat row; ARCHIVED is one summary row; no data is one honest
+ * row. This page maps each row to its menu_item_t — the text store, icons
+ * and "You:" prefixes are presentation and stay here. */
 static void build_chat_items(void)
 {
     memset(g_chat_items, 0, sizeof g_chat_items);
@@ -111,74 +117,66 @@ static void build_chat_items(void)
         chat_cat_off[c] = 0;
         chat_cat_n[c] = 0;
     }
-    g_unread_total = 0;
 
     ui_chat_list_t list;
-    if (ui_chat_source_load(&list) != 0) {
-        /* No data: one honest row in ALL instead of invented chats. */
-        snprintf(g_chat_text[UI_CHAT_MAX].name, sizeof g_chat_text[0].name,
-                 "No chats");
-        snprintf(g_chat_text[UI_CHAT_MAX].prev, sizeof g_chat_text[0].prev,
-                 "source unavailable");
-        add_chat_item(0, NULL, UI_CHAT_MAX);
-        g_chat_items[chat_cat_off[0]].icon = I_INBOX;
-    } else {
-        /* Pass 1: count rows per category (capped at the slice size). */
-        for (int i = 0; i < list.count; i++) {
-            const ui_chat_t *c = &list.chats[i];
-            if (chat_cat_n[0] < CHAT_POOL_CAT) chat_cat_n[0]++;   /* ALL    */
-            if (c->family && chat_cat_n[1] < CHAT_POOL_CAT) chat_cat_n[1]++;
-            if (c->unread && chat_cat_n[2] < CHAT_POOL_CAT) chat_cat_n[2]++;
-            if (c->favorite && chat_cat_n[3] < CHAT_POOL_CAT) chat_cat_n[3]++;
-        }
-        if (chat_cat_n[0] < CHAT_POOL_CAT) chat_cat_n[0] += 1;    /* New Chat */
-        int has_archived = (list.archived_count > 0);             /* ARCHIVED */
-        chat_cat_n[4] = has_archived ? 1 : 0;
+    const ui_chat_list_t *have = NULL;
+    if (ui_chat_source_load(&list) == 0) {
+        have = &list;
+    }
+    g_unread_total = model_chats_unread_total(have);   /* for HOME widget */
 
-        /* Pass 2: fix the offsets, then fill. add_chat_item() advances
-         * chat_cat_n as it writes, so zero the counters first — pass 1's
-         * counts have served their purpose (the offsets are now frozen). */
-        int off = 0;
-        for (int c = 0; c < CHAT_N_CATS; c++) {
-            chat_cat_off[c] = off;
-            off += chat_cat_n[c];
-        }
-        memset(chat_cat_n, 0, sizeof chat_cat_n);
-        for (int i = 0; i < list.count; i++) {
-            const ui_chat_t *c = &list.chats[i];
-            snprintf(g_chat_text[i].name, sizeof g_chat_text[i].name,
-                     "%s", c->name);
-            if (c->mine && c->last[0]) {
-                snprintf(g_chat_text[i].prev, sizeof g_chat_text[i].prev,
-                         "You: %s", c->last);
-            } else {
-                snprintf(g_chat_text[i].prev, sizeof g_chat_text[i].prev,
-                         "%s", c->last);
+    /* Categories are filled in order, each at the running offset — the
+     * slices must not overlap in the shared item pool. */
+    int off = 0;
+    for (int c = 0; c < CHAT_N_CATS; c++) {
+        model_chat_row_t rows[CHAT_POOL_CAT];
+        int n = model_chats_slice(have, (model_chat_cat_t)c, rows,
+                                  CHAT_POOL_CAT);
+        chat_cat_off[c] = off;
+        off += n;
+        for (int i = 0; i < n; i++) {
+            switch (rows[i].kind) {
+            case MODEL_CHAT_ROW_CHAT: {
+                const ui_chat_t *ch = rows[i].chat;
+                int tidx = (int)(ch - list.chats);   /* shared text slot */
+                snprintf(g_chat_text[tidx].name, sizeof g_chat_text[0].name,
+                         "%s", ch->name);
+                if (ch->mine && ch->last[0]) {
+                    snprintf(g_chat_text[tidx].prev,
+                             sizeof g_chat_text[0].prev, "You: %s", ch->last);
+                } else {
+                    snprintf(g_chat_text[tidx].prev,
+                             sizeof g_chat_text[0].prev, "%s", ch->last);
+                }
+                snprintf(g_chat_text[tidx].time, sizeof g_chat_text[0].time,
+                         "%s", ch->time);
+                add_chat_item(c, ch, tidx);
+                break;
             }
-            snprintf(g_chat_text[i].time, sizeof g_chat_text[i].time,
-                     "%s", c->time);
-            add_chat_item(0, c, i);                       /* ALL              */
-            if (c->family)   add_chat_item(1, c, i);      /* FAMILY           */
-            if (c->unread)   add_chat_item(2, c, i);      /* UNREAD           */
-            if (c->favorite) add_chat_item(3, c, i);      /* FAVORITES        */
-            g_unread_total += c->unread;                  /* for HOME widget  */
-        }
-
-        /* Trailing New Chat row in ALL. */
-        snprintf(g_chat_text[UI_CHAT_MAX + 1].name,
-                 sizeof g_chat_text[0].name, "New Chat");
-        add_chat_item(0, NULL, UI_CHAT_MAX + 1);
-
-        /* ARCHIVED: one summary row. (has_archived — chat_cat_n was
-         * zeroed for the fill pass above.) */
-        if (has_archived) {
-            snprintf(g_chat_text[UI_CHAT_MAX + 2].name,
-                     sizeof g_chat_text[0].name, "Archived");
-            snprintf(g_chat_text[UI_CHAT_MAX + 2].prev,
-                     sizeof g_chat_text[0].prev, "%d chats",
-                     list.archived_count);
-            add_chat_item(4, NULL, UI_CHAT_MAX + 2);
-            g_chat_items[chat_cat_off[4]].icon = I_ARCHIVE;
+            case MODEL_CHAT_ROW_NEW_CHAT:
+                snprintf(g_chat_text[UI_CHAT_MAX + 1].name,
+                         sizeof g_chat_text[0].name, "New Chat");
+                add_chat_item(c, NULL, UI_CHAT_MAX + 1);
+                break;
+            case MODEL_CHAT_ROW_ARCHIVED:
+                snprintf(g_chat_text[UI_CHAT_MAX + 2].name,
+                         sizeof g_chat_text[0].name, "Archived");
+                snprintf(g_chat_text[UI_CHAT_MAX + 2].prev,
+                         sizeof g_chat_text[0].prev, "%d chats",
+                         rows[i].archived_count);
+                add_chat_item(c, NULL, UI_CHAT_MAX + 2);
+                g_chat_items[chat_cat_off[c] + chat_cat_n[c] - 1].icon = I_ARCHIVE;
+                break;
+            case MODEL_CHAT_ROW_NO_DATA:
+            default:
+                snprintf(g_chat_text[UI_CHAT_MAX].name,
+                         sizeof g_chat_text[0].name, "No chats");
+                snprintf(g_chat_text[UI_CHAT_MAX].prev,
+                         sizeof g_chat_text[0].prev, "source unavailable");
+                add_chat_item(c, NULL, UI_CHAT_MAX);
+                g_chat_items[chat_cat_off[c] + chat_cat_n[c] - 1].icon = I_INBOX;
+                break;
+            }
         }
     }
 

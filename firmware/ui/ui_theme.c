@@ -12,8 +12,14 @@
  * loading them from a separate translation unit left the cache unallocated.
  * Colours are pure appearance data with no LVGL-lifecycle dependency, so they
  * live cleanly in the theme layer.
+ *
+ * The CHOSEN theme and font preferences are not state of this file any more:
+ * they live in the model layer (model/settings.c, spec §16.4) and persist
+ * through hal_storage. This file owns the palette tables, the face data and
+ * the test ladders — presentation machinery around the model's values.
  */
 
+#include "model/settings.h"
 #include "ui/ui_theme.h"
 
 /* ================================================================== */
@@ -151,17 +157,16 @@ static const font_step_t g_ladder[UI_FONT_ROLE_COUNT][6] = {
 /* Live state                                                          */
 /* ================================================================== */
 
-static ui_theme_id_t g_theme = UI_THEME_DARK;
 static ui_palette_t  g_pal;
 static void        (*g_apply_cb)(void);
-static uint8_t       g_ladder_idx[UI_FONT_ROLE_COUNT] = { 0, 0, 0 };
 
 ui_font_pref_t ui_font_pref(ui_font_role_t role)
 {
     ui_font_pref_t p = { UI_FACE_SILKSCREEN, UI_FONT_TITLE_PX };
     if ((unsigned)role < UI_FONT_ROLE_COUNT) {
-        p.face = g_ladder[role][g_ladder_idx[role]].face;
-        p.px   = g_ladder[role][g_ladder_idx[role]].px;
+        const model_font_pref_t *m = &model_settings()->fonts[role];
+        p.face = (ui_face_t)m->face;
+        p.px   = m->px;
     }
     return p;
 }
@@ -171,7 +176,20 @@ void ui_font_pref_next(ui_font_role_t role)
     if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
         return;
     }
-    g_ladder_idx[role] = (uint8_t)((g_ladder_idx[role] + 1) % LADDER_N);
+    /* The chosen (face, px) lives in the model; the ladder here is the ring
+     * of candidates it steps through. Find the current entry (a stored value
+     * outside the ladder starts the ring from the beginning), then step. */
+    ui_font_pref_t cur = ui_font_pref(role);
+    int idx = 0;
+    for (int i = 0; i < LADDER_N; i++) {
+        if (g_ladder[role][i].face == cur.face && g_ladder[role][i].px == cur.px) {
+            idx = i;
+            break;
+        }
+    }
+    int next = (idx + 1) % LADDER_N;
+    model_settings_set_font(role, g_ladder[role][next].face,
+                            g_ladder[role][next].px);
     if (g_apply_cb) {
         g_apply_cb();   /* re-resolve the faces, then restyle every page */
     }
@@ -201,14 +219,16 @@ const char *ui_face_file(ui_face_t face)
  * into the live palette once per switch. */
 static void resolve(void)
 {
+    uint8_t theme = model_settings()->theme;
     for (int r = 0; r < UI_ROLE_COUNT; r++) {
-        g_pal.c[r] = lv_color_hex(g_theme_rgb[g_theme][r]);
+        g_pal.c[r] = lv_color_hex(g_theme_rgb[theme][r]);
     }
 }
 
 int ui_theme_init(void)
 {
-    g_theme = UI_THEME_DARK;
+    /* The chosen theme is model state (loaded from storage at startup); the
+     * factory default is DARK. */
     resolve();
     return 0;
 }
@@ -223,17 +243,20 @@ lv_color_t ui_color(ui_role_t role)
 
 void ui_theme_set(ui_theme_id_t id)
 {
-    if ((unsigned)id >= UI_THEME_COUNT || id == g_theme) {
+    if ((unsigned)id >= UI_THEME_COUNT || id == model_settings()->theme) {
         return;
     }
-    g_theme = id;
+    model_settings_set_theme((uint8_t)id);
     resolve();
     if (g_apply_cb) {
         g_apply_cb();   /* the shell's restyle pass: built pages repaint */
     }
 }
 
-ui_theme_id_t ui_theme_get(void) { return g_theme; }
+ui_theme_id_t ui_theme_get(void)
+{
+    return (ui_theme_id_t)model_settings()->theme;
+}
 
 const char *ui_theme_name(ui_theme_id_t id)
 {

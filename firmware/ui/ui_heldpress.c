@@ -6,85 +6,62 @@
  * preset list is short on purpose — these are quick actions reachable from
  * any page without touching the main menu, and the display strings must fit
  * the renderer's 104 px meta column (UI_ROW_META_W).
+ *
+ * The bindings live in the model layer (model/settings.c, spec §16.4) and
+ * persist through hal_storage: this page reads the actions and maps each to
+ * the page that implements it.
  */
 
 #include <string.h>
 
+#include "model/settings.h"
 #include "ui/ui_heldpress.h"
 #include "ui/ui_icons.h"
 #include "ui/ui_keymap.h"
 
-/* The configurable keys, in slot order (the sub-page's row order). */
-static const hal_key_t g_keys[HELDPRESS_N] = {
-    HAL_KEY_SHOULDER_L, HAL_KEY_SHOULDER_R,
-    HAL_KEY_UP,         HAL_KEY_DOWN,
-    HAL_KEY_DIGIT_0, HAL_KEY_DIGIT_1, HAL_KEY_DIGIT_2, HAL_KEY_DIGIT_3,
-    HAL_KEY_DIGIT_4, HAL_KEY_DIGIT_5, HAL_KEY_DIGIT_6, HAL_KEY_DIGIT_7,
-    HAL_KEY_DIGIT_8, HAL_KEY_DIGIT_9, HAL_KEY_STAR,   HAL_KEY_HASH,
-};
-
-/* Row labels for the sub-page (the key name). */
+/* Row labels for the sub-page (the key name). The key->slot table itself is
+ * model data (model_settings_heldpress_slot). */
 static const char *const g_key_lbl[HELDPRESS_N] = {
     "SH L", "SH R", "UP", "DOWN",
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "#",
 };
 
-/* Preset actions a slot can take, in cycle order (wraps back to none). */
-static const page_id_t g_presets[] = {
-    PAGE_NONE,         /* unconfigured: long press = short press   */
-    PAGE_NEW_MESSAGE,  /* Messaging: compose                      */
-    PAGE_NEW_CALL,     /* Calls: new call                         */
-    PAGE_MAP_SEARCH,   /* Maps: search                            */
-    PAGE_CALL_HISTORY, /* Calls: history                          */
-    PAGE_CONTACTS,     /* Calls: contacts                         */
-};
-#define N_PRESETS ((int)(sizeof g_presets / sizeof g_presets[0]))
-
-/* Display strings for the presets, in preset order. Kept to 8 chars so
- * they fit the renderer's meta column on one line (like "CAROUSEL"). */
-static const char *const g_preset_lbl[] = {
+/* Display strings for the preset actions, in model_heldpress_t order. Kept
+ * to 8 chars so they fit the renderer's meta column on one line (like
+ * "CAROUSEL"). */
+static const char *const g_preset_lbl[MODEL_HP_COUNT] = {
     "(none)", "MSG", "CALL", "MAPS", "HIST", "PEOPLE",
 };
 
-/* The sixteen slots. Seeded with one action so the feature is visible out
- * of the box (mock data, in the spirit of the speed-dial seeding). */
-static page_id_t g_slots[HELDPRESS_N] = {
-    [0] = PAGE_NEW_MESSAGE,   /* SHOULDER-L: quick compose         */
-};
+/* The page that implements each preset action. */
+static page_id_t hp_page(model_heldpress_t a)
+{
+    switch (a) {
+    case MODEL_HP_NEW_MESSAGE:  return PAGE_NEW_MESSAGE;
+    case MODEL_HP_NEW_CALL:     return PAGE_NEW_CALL;
+    case MODEL_HP_MAP_SEARCH:   return PAGE_MAP_SEARCH;
+    case MODEL_HP_CALL_HISTORY: return PAGE_CALL_HISTORY;
+    case MODEL_HP_CONTACTS:     return PAGE_CONTACTS;
+    default:                    return PAGE_NONE;
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /* Slot accessors                                                      */
 /* ------------------------------------------------------------------ */
 
-static int slot_of(hal_key_t key)
-{
-    for (int i = 0; i < HELDPRESS_N; i++) {
-        if (g_keys[i] == key) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 page_id_t ui_heldpress_target(hal_key_t key)
 {
-    int i = slot_of(key);
-    return i >= 0 ? g_slots[i] : PAGE_NONE;
+    int i = model_settings_heldpress_slot((int)key);
+    if (i < 0) {
+        return PAGE_NONE;
+    }
+    return hp_page((model_heldpress_t)model_settings()->heldpress[i]);
 }
 
 void ui_heldpress_cycle(uint8_t i)
 {
-    if (i >= HELDPRESS_N) {
-        return;
-    }
-    int cur = 0;   /* unknown value (cannot happen): treat as none */
-    for (int p = 0; p < N_PRESETS; p++) {
-        if (g_slots[i] == g_presets[p]) {
-            cur = p;
-            break;
-        }
-    }
-    g_slots[i] = g_presets[(cur + 1) % N_PRESETS];
+    model_settings_cycle_heldpress(i);
 }
 
 /* ------------------------------------------------------------------ */
@@ -119,16 +96,13 @@ static menu_t g_page = {
 static void refresh_rows(void)
 {
     for (int i = 0; i < HELDPRESS_N; i++) {
-        int p = 0;   /* unknown value (cannot happen): treat as none */
-        for (int q = 1; q < N_PRESETS; q++) {
-            if (g_slots[i] == g_presets[q]) {
-                p = q;
-                break;
-            }
+        model_heldpress_t a = (model_heldpress_t)model_settings()->heldpress[i];
+        if (a >= MODEL_HP_COUNT) {
+            a = MODEL_HP_NONE;   /* corrupt value: render as unconfigured */
         }
         g_items[i].label  = g_key_lbl[i];
         g_items[i].icon   = I_BOLT;
-        g_items[i].meta   = g_preset_lbl[p];
+        g_items[i].meta   = g_preset_lbl[a];
         g_items[i].target = PAGE_NONE;   /* activation = cycle, not a page */
     }
 }

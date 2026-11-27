@@ -417,6 +417,12 @@ int main(int argc, char **argv)
     extern int hal_storage_init(void);
     hal_storage_init();
 
+    /* Restore user settings from storage (spec §16.4): factory defaults
+     * stand when there is no saved state. Must run before the deterministic
+     * shot overrides below, so --theme/--font/--menu-style win for shots. */
+    extern int model_settings_load(void);
+    model_settings_load();
+
     /* Deterministic menu view for shots: set before the UI thread starts so
      * build_main_menu() reads it. (pthread_create is the happens-before.) */
     if (menu_style) {
