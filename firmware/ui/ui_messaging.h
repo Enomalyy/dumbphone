@@ -34,3 +34,8 @@ void ui_messaging_cycle_cat(int dir);
 /* Total unread across all categories (0 when the source is unavailable).
  * Static per boot — the desktop source is a file read once at build time. */
 int ui_messaging_unread_total(void);
+
+/* The index (into the model's chat list) of the selected row in the
+ * CURRENT category, or -1 for synthetic rows (New Chat / Archived /
+ * no data). The shell uses it to open the conversation (spec §14.7). */
+int ui_messaging_selected_chat(void);

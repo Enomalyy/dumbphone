@@ -53,6 +53,7 @@ const opt_entry_t *ui_opts_callhist(int *n);
 const opt_entry_t *ui_opts_contacts(int *n);
 const opt_entry_t *ui_opts_stub(int *n);
 const opt_entry_t *ui_opts_lock(int *n);
+const opt_entry_t *ui_opts_conv(int *n);
 
 #ifdef __cplusplus
 }

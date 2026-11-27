@@ -52,6 +52,7 @@
 #endif
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
+#include "model/chat_model.h"
 #include "ui/ui_geometry.h"
 #include "ui/ui_pages.h"
 #include "ui/ui_settings.h"
@@ -270,6 +271,7 @@ int main(int argc, char **argv)
     const char *menu_style = NULL;   /* "carousel" | "grid"         */
     const char *theme_name = NULL;    /* "dark" | "light"            */
     const char *font_cycle = NULL;    /* "header|text|subtext[:N]"   */
+    const char *data_path = NULL;     /* explicit chat source file   */
     const char *geom = NULL;          /* "WxH" panel geometry          */
     /* Loopback by default: the viewport is a dev tool and should not be
      * reachable from other machines unless asked. To drive it from a phone
@@ -346,6 +348,8 @@ int main(int argc, char **argv)
             theme_name = argv[++i];
         } else if (!strcmp(argv[i], "--font") && i + 1 < argc) {
             font_cycle = argv[++i];
+        } else if (!strcmp(argv[i], "--data") && i + 1 < argc) {
+            data_path = argv[++i];
         } else if ((!strcmp(argv[i], "--geom") || !strcmp(argv[i], "--geometry"))
                    && i + 1 < argc) {
             geom = argv[++i];
@@ -370,6 +374,7 @@ int main(int argc, char **argv)
                     "[--swipe up|down|left|right [dist] ...] [--tap x y ...] "
                     "[--hold <ms>] [--settle N] "
                     "[--menu-style carousel|grid] "
+                    "[--data <chats.json>] "
                     "[--geom WxH] [--scale N] [--frames N] "
                     "[--no-server] [--server-bind IP] [--server-port N] "
                     "[--server-fps N]\n", argv[0]);
@@ -469,6 +474,14 @@ int main(int argc, char **argv)
      * it every minute. Golden frames must be reproducible. */
     if (shot_path || shot_win_path) {
         ui_shell_set_clock_freeze(true);
+    }
+
+    /* Deterministic chat data for shots: an explicit file wins over the
+     * real-data/sample chain, so golden scenes render the same on every
+     * machine. Set before the UI thread starts (pthread_create is the
+     * happens-before). */
+    if (data_path) {
+        ui_chat_source_set_path(data_path);
     }
 
 #ifdef __EMSCRIPTEN__

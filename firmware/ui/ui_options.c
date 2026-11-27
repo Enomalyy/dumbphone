@@ -90,3 +90,4 @@ const opt_entry_t *ui_opts_callhist(int *n)  { *n = 2; return opts_callhist; }
 const opt_entry_t *ui_opts_contacts(int *n)  { *n = 1; return opts_contacts; }
 const opt_entry_t *ui_opts_stub(int *n)      { *n = 1; return opts_stub; }
 const opt_entry_t *ui_opts_lock(int *n)      { *n = 0; return NULL; }
+const opt_entry_t *ui_opts_conv(int *n)      { *n = 0; return NULL; }

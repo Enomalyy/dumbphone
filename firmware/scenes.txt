@@ -70,6 +70,19 @@ contacts-scroll         panel --screen contacts --swipe up 120
 # start after the dwell and accelerate to the floor, landing clamped on the
 # last row (jitter-safe: extra repeats only stay clamped).
 key-repeat              panel --screen chat --key down --hold 1200
+# §14.7: the conversation page — opened from a chat row (--key down N
+# --key ok). --data pins the committed sample fixture so every thread is
+# deterministic on any machine (host/data/chats.json is real data, git-ignored).
+# conv-sam shows the delivery-mark spread (pending bar pinned to "|" in shot
+# mode, one/two dim marks, accent read marks) plus emoji and a divider;
+# conv-grandma is the Hebrew/RTL thread with a day-change divider;
+# conv-scrolled scrolls the long Book Club group thread back past its first
+# screen; conv-sms is a non-WhatsApp chat — no marks, no pending bar.
+conv-alex             panel --screen chat --data fixtures/chats.sample.json --key down 1 --key ok
+conv-sam              panel --screen chat --data fixtures/chats.sample.json --key down 2 --key ok
+conv-grandma          panel --screen chat --data fixtures/chats.sample.json --key down 3 --key ok
+conv-scrolled         panel --screen chat --data fixtures/chats.sample.json --key down 4 --key ok --swipe up
+conv-sms              panel --screen chat --data fixtures/chats.sample.json --key down 8 --key ok
 swipe-chat              panel --screen chat --swipe left 120
 swipe-menu              panel --screen menu --swipe left 120
 tap-row3                panel --screen chat --tap 160 217

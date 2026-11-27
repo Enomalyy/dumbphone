@@ -85,6 +85,7 @@ add_executable(dumbphone-desktop
     ${FW_DIR}/ui/ui_text.c
     ${FW_DIR}/ui/font_pixelify_m.c
     ${FW_DIR}/ui/ui_menu.c
+    ${FW_DIR}/ui/ui_chat_view.c
     ${FW_DIR}/ui/ui_options.c
     ${FW_DIR}/ui/ui_settings.c
     ${FW_DIR}/ui/ui_speeddial.c

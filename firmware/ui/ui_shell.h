@@ -41,6 +41,7 @@ typedef enum {
     UI_SCREEN_CONTACTS,      /* Calls: contacts list (spec §2)                   */
     UI_SCREEN_STUB,          /* generic leaf page (title + "coming soon")       */
     UI_SCREEN_LOCK,          /* lock screen: keypad unlocks (spec §1)           */
+    UI_SCREEN_CONV,          /* conversation: the selected chat's messages (§14.7) */
     UI_SCREEN_COUNT          /* not a screen — bound for coverage checks        */
 } ui_screen_id_t;
 
@@ -60,6 +61,10 @@ void ui_shell_set_startup_theme(int theme_id);
  * only: keeps golden frames reproducible for runs longer than a second.
  * Call before the UI thread starts (shot mode does this for you). */
 void ui_shell_set_clock_freeze(bool frozen);
+
+/* True in harness/shot runs: animations stay pinned to their first frame so
+ * golden frames are reproducible. */
+bool ui_shell_clock_frozen(void);
 
 /* Swap the content area to a screen. Must be called on the UI thread. */
 void ui_shell_show_screen(ui_screen_id_t id);

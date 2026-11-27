@@ -7,6 +7,7 @@
  * (spec §9) through the same types.
  */
 #include <stddef.h>
+#include <string.h>
 
 #include "model/chat_model.h"
 
@@ -54,6 +55,26 @@ int model_chats_slice(const ui_chat_list_t *list, model_chat_cat_t cat,
         n++;
     }
     return n;
+}
+
+/* Per-chat transport flags: the source sets them as it loads the list. */
+static bool g_sms[UI_CHAT_MAX];
+
+void model_chats_reset_sms(void)
+{
+    memset(g_sms, 0, sizeof g_sms);
+}
+
+void model_chat_set_sms(int chat_idx, bool sms)
+{
+    if (chat_idx >= 0 && chat_idx < UI_CHAT_MAX) {
+        g_sms[chat_idx] = sms;
+    }
+}
+
+bool ui_chat_is_sms(int chat_idx)
+{
+    return chat_idx >= 0 && chat_idx < UI_CHAT_MAX ? g_sms[chat_idx] : false;
 }
 
 int model_chats_unread_total(const ui_chat_list_t *list)

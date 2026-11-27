@@ -18,6 +18,7 @@
  */
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,49 @@ static const char *skip_ws(const char *p)
         p++;
     }
     return p;
+}
+
+/* Append a Unicode codepoint as UTF-8; returns the new index. */
+static size_t append_utf8(char *out, size_t i, size_t out_len, uint32_t cp)
+{
+    if (cp < 0x80) {
+        if (i + 1 < out_len) out[i++] = (char)cp;
+    } else if (cp < 0x800) {
+        if (i + 2 < out_len) {
+            out[i++] = (char)(0xC0 | (cp >> 6));
+            out[i++] = (char)(0x80 | (cp & 0x3F));
+        }
+    } else if (cp < 0x10000) {
+        if (i + 3 < out_len) {
+            out[i++] = (char)(0xE0 | (cp >> 12));
+            out[i++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[i++] = (char)(0x80 | (cp & 0x3F));
+        }
+    } else {
+        if (i + 4 < out_len) {
+            out[i++] = (char)(0xF0 | (cp >> 18));
+            out[i++] = (char)(0x80 | ((cp >> 12) & 0x3F));
+            out[i++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+            out[i++] = (char)(0x80 | (cp & 0x3F));
+        }
+    }
+    return i;
+}
+
+/* Four hex digits at p into *out; 0 on success. */
+static int hex4(const char *p, uint32_t *out)
+{
+    uint32_t v = 0;
+    for (int k = 0; k < 4; k++) {
+        char c = p[k];
+        v <<= 4;
+        if (c >= '0' && c <= '9')      v |= (uint32_t)(c - '0');
+        else if (c >= 'a' && c <= 'f') v |= (uint32_t)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') v |= (uint32_t)(c - 'A' + 10);
+        else return -1;
+    }
+    *out = v;
+    return 0;
 }
 
 /* Position of "key" : <value> inside the span [s, e), or NULL. The span
@@ -74,7 +118,26 @@ static bool parse_string_span(const char *s, const char *e, const char *key,
             case 'r':  c = '\r'; p++; break;
             case '"':  c = '"';  p++; break;
             case '\\': c = '\\'; p++; break;
-            case 'u':  c = '?';  p += (p + 4 < e) ? 5 : 1; break;
+            case 'u': {
+                uint32_t cp = 0;
+                if (p + 4 < e && hex4(p + 1, &cp) == 0) {
+                    p += 5; /* past \uXXXX */
+                    /* UTF-16 surrogate pair -> one codepoint. */
+                    if (cp >= 0xD800 && cp <= 0xDBFF && p + 5 < e &&
+                        p[0] == '\\' && p[1] == 'u') {
+                        uint32_t lo = 0;
+                        if (hex4(p + 2, &lo) == 0 && lo >= 0xDC00 && lo <= 0xDFFF) {
+                            cp = 0x10000u + ((cp - 0xD800u) << 10) + (lo - 0xDC00u);
+                            p += 6;
+                        }
+                    }
+                    i = append_utf8(out, i, out_len, cp);
+                    continue; /* already written */
+                }
+                c = '?';
+                p += (p + 4 < e) ? 5 : 1;
+                break;
+            }
             default:   c = *p;   p++; break;
             }
         } else {
@@ -167,12 +230,17 @@ static int load_file(const char *path, char **out)
     return 0;
 }
 
-/* One message object: {mine, day, time "HH:MM", from, text}. Missing fields
- * keep their zero values (an undated message sorts to the top of the chat). */
+/* One message object: {mine, day, time "HH:MM", ack, from, text}.
+ * Missing fields keep their zero values (an undated message sorts to the
+ * top of the chat; a missing ack is PENDING). */
 static void parse_message(const char *p, const char *e, ui_message_t *m)
 {
     memset(m, 0, sizeof *m);
     parse_bool_span(p, e, "mine", &m->mine);
+    int ack = 0;
+    if (parse_int_span(p, e, "ack", &ack)) {
+        m->ack = (uint8_t)(ack < 0 ? 0 : (ack > 4 ? 4 : ack));
+    }
     int day = 0;
     if (parse_int_span(p, e, "day", &day) && day < 0) {
         day = 0;
@@ -213,8 +281,20 @@ static void parse_messages(const char *p, const char *e, int chat_idx)
         parse_message(q, mend, &msgs[n]);
         n++;
         q = mend + 1;
+        if (*q == ',') {
+            q++;
+        }
     }
     model_messages_set(chat_idx, msgs, n);
+}
+
+/* Explicit data file (the shot harness' --data flag): takes priority over
+ * the real-data/sample chain so golden scenes are deterministic. */
+static const char *g_explicit_path = NULL;
+
+void ui_chat_source_set_path(const char *path)
+{
+    g_explicit_path = path;
 }
 
 int ui_chat_source_load(ui_chat_list_t *out)
@@ -224,11 +304,15 @@ int ui_chat_source_load(ui_chat_list_t *out)
     }
     memset(out, 0, sizeof *out);
     model_messages_reset();   /* a fresh load owns the message store too */
+    model_chats_reset_sms();  /* ...and the per-chat transport flags       */
 
-    /* Real data first (host/data/chats.json, git-ignored), then the committed
-     * sample with invented names, so a fresh clone is never empty. */
+    /* Explicit path first (deterministic shots), then real data
+     * (host/data/chats.json, git-ignored), then the committed sample with
+     * invented names, so a fresh clone is never empty. */
     char *text = NULL;
-    if (load_file(CHAT_DATA_PATH, &text) != 0) {
+    if (g_explicit_path && load_file(g_explicit_path, &text) == 0) {
+        /* explicit source loaded */
+    } else if (load_file(CHAT_DATA_PATH, &text) != 0) {
         if (load_file(CHAT_SAMPLE_PATH, &text) != 0) {
             fprintf(stderr, "[chats] cannot read %s or %s\n",
                     CHAT_DATA_PATH, CHAT_SAMPLE_PATH);
@@ -277,6 +361,10 @@ int ui_chat_source_load(ui_chat_list_t *out)
         parse_bool_span(p, end, "group", &c->group);
         parse_bool_span(p, end, "family", &c->family);
         parse_bool_span(p, end, "favorite", &c->favorite);
+        bool sms = false;
+        if (parse_bool_span(p, end, "sms", &sms)) {
+            model_chat_set_sms(out->count, sms);
+        }
         int unread = 0;
         if (parse_int_span(p, end, "unread", &unread) && unread > 0) {
             c->unread = (uint16_t)unread;
@@ -293,3 +381,4 @@ int ui_chat_source_load(ui_chat_list_t *out)
     free(text);
     return out->count > 0 ? 0 : -1;
 }
+

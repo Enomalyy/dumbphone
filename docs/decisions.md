@@ -168,3 +168,15 @@ it: after §14 there will be far more layout code to unpick.
   every other page, so one engine covers both.
 
 ---
+
+## 17. AGENTS.md tree with hard token budgets (Eli's call, 27/11)
+
+The project docs are split into one AGENTS.md per scope, each under a measured budget:
+root ≦900 tokens, `firmware/` ≦900, `firmware/ui/` ≦400, `firmware/model/` ≦300,
+`tools/` ≦350, `reports/` ≦80. The rule that keeps them from growing back: **an
+AGENTS.md may contain only what a session working in that folder must know before
+reading anything; decisions go to decisions.md, plans to ROADMAP/issues, status to
+git.** History (relay legs, audits, commit ranges, build narratives) belongs in this
+file, ROADMAP and git — never in an AGENTS.md.
+
+---

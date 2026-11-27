@@ -29,6 +29,7 @@
 #include "hal/hal_display.h"
 #include "hal/hal_input.h"
 #include "ui_calls.h"
+#include "ui_chat_view.h"
 #include "ui_heldpress.h"
 #include "font_pixelify.h"
 #include "ui_keymap.h"
@@ -391,9 +392,9 @@ static list_page_t *page_lists[UI_PAGE_COUNT];
 enum {
     ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_SETTINGS, ROW_DISPLAY,
     ROW_FONT, ROW_SPEEDDIALS, ROW_HELDPRESS, ROW_CALLHIST, ROW_CONTACTS,
-    ROW_STUB, ROW_LOCK,
+    ROW_STUB, ROW_LOCK, ROW_CONV,
 };
-_Static_assert(ROW_LOCK + 1 == UI_SCREEN_COUNT, "one registry row per screen");
+_Static_assert(ROW_CONV + 1 == UI_SCREEN_COUNT, "one registry row per screen");
 
 /* Forward decls: the input entry point (the soft-key bar re-enters it) and
  * the leaf-page openers, all defined further down. */
@@ -689,6 +690,11 @@ static lv_obj_t *page_lock_build(void)
     return ui_leaf_lock_root();
 }
 
+static lv_obj_t *page_conv_build(void)
+{
+    return ui_chatview_build(content_area);
+}
+
 /* Keymap wrappers — the list pages own their keymap inside their menu_t. */
 static const keymap_t *page_settings_keymap(void)  { return &ui_settings_page()->keys; }
 static const keymap_t *page_display_keymap(void)   { return &ui_settings_display_page()->keys; }
@@ -697,6 +703,7 @@ static const keymap_t *page_speeddial_keymap(void) { return &ui_speeddial_page()
 static const keymap_t *page_heldpress_keymap(void) { return &ui_heldpress_page()->keys; }
 static const keymap_t *page_callhist_keymap(void)  { return &ui_calls_history_page()->keys; }
 static const keymap_t *page_contacts_keymap(void)  { return &ui_calls_contacts_page()->keys; }
+static const keymap_t *page_conv_keymap(void)      { return ui_chatview_keymap(); }
 
 /* Activate callbacks — what CENTER / a row tap means on each page. Each
  * reads its own page's selection, so every caller (CENTER, the sidebar's
@@ -708,14 +715,19 @@ static void page_home_activate(void)
 
 static void page_chatlist_activate(void)
 {
-    /* The conversation page is a later leg: for now a stub titled with the
-     * chat name — the same wiring bar as a speed dial's call screen (the
-     * keymap already promised CENTER opens the selected chat). */
+    /* The selected chat row opens its CONVERSATION (spec §14.7): the model's
+     * per-chat store was filled by the source when the list loaded. A
+     * synthetic row (New Chat / Archive) or a missing selection keeps the
+     * old stub behaviour — an honest placeholder until those stages land. */
+    int idx = ui_messaging_selected_chat();
     const char *name = ui_list_selected_label(page_lists[ROW_CHATLIST]);
-    if (name) {
-        ui_leaf_set_stub_title(name);
+    if (idx < 0 || !name) {
+        ui_leaf_set_stub_title(name ? name : "");
         push_screen(UI_SCREEN_STUB);
+        return;
     }
+    ui_chatview_open(idx, name);
+    push_screen(UI_SCREEN_CONV);
 }
 
 static void page_menu_activate(void)
@@ -805,6 +817,7 @@ const ui_page_t ui_pages[] = {
     { "contacts",   PAGE_CONTACTS,   UI_SCREEN_CONTACTS, page_contacts_build, page_contacts_keymap,  NULL,                   NULL,                 ui_opts_contacts,     NULL },
     { "stub",       PAGE_NONE,       UI_SCREEN_STUB,     page_stub_build,     ui_leaf_stub_keymap,  NULL,                   NULL,                 ui_opts_stub,         NULL },
     { "lock",       PAGE_NONE,       UI_SCREEN_LOCK,     page_lock_build,     ui_leaf_lock_keymap,  NULL,                   NULL,                 ui_opts_lock,         NULL },
+    { "conv",       PAGE_NONE,       UI_SCREEN_CONV,     page_conv_build,     page_conv_keymap,     NULL,                   NULL,                 ui_opts_conv,         NULL },
 };
 const int ui_page_count = ARRAY_LEN(ui_pages);
 _Static_assert(ARRAY_LEN(ui_pages) == UI_PAGE_COUNT,
@@ -1529,6 +1542,7 @@ static void appearance_apply(void)
     ui_sidebar_restyle();
     ui_home_restyle();
     ui_leaf_restyle();
+    ui_chatview_restyle();
 }
 
 /* Soft-key bar shown/hidden (spec §14.9): the content area takes the bar's
@@ -1550,6 +1564,7 @@ static void relayout_all(void)
     ui_menu_relayout();
     ui_home_relayout();
     ui_leaf_relayout();
+    ui_chatview_relayout();
     ui_sidebar_relayout();
 }
 
@@ -1576,6 +1591,11 @@ void ui_shell_set_clock_freeze(bool frozen)
      * clock would land in the golden frame and change every minute. Shot
      * mode freezes it. Call before the UI thread starts. */
     clock_frozen = frozen;
+}
+
+bool ui_shell_clock_frozen(void)
+{
+    return clock_frozen;
 }
 
 void ui_shell_request_screen(ui_screen_id_t id)

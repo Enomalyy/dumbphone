@@ -41,6 +41,19 @@ typedef struct {
  * there is no data (the shell then renders an empty state). */
 int ui_chat_source_load(ui_chat_list_t *out);
 
+/* Point the source at an explicit file (the shot harness' --data flag):
+ * it takes priority over the real-data/sample chain, so golden scenes are
+ * deterministic on any machine. NULL restores the default chain. */
+void ui_chat_source_set_path(const char *path);
+
+/* Per-chat transport, set by the target source as it loads the list:
+ * true for non-WhatsApp chats (SMS). Such chats get no WA treatment in
+ * the conversation view — no delivery marks, no pending bar. A fresh load
+ * clears the flags; out-of-range indexes are false. */
+void model_chats_reset_sms(void);
+void model_chat_set_sms(int chat_idx, bool sms);
+bool ui_chat_is_sms(int chat_idx);
+
 /* ---- per-category slice (spec §2) -------------------------------------- */
 
 typedef enum {

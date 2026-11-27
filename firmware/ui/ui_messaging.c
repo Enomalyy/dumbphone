@@ -51,6 +51,10 @@ static menu_item_t g_chat_items[CHAT_N_CATS * CHAT_POOL_CAT];
 static int chat_cat_off[CHAT_N_CATS];   /* pool offset per category  */
 static int chat_cat_n[CHAT_N_CATS];     /* item count per category   */
 
+/* The model chat index behind each row of each category (-1 = synthetic
+ * row: New Chat / Archived / no data). Filled alongside add_chat_item(). */
+static int g_row_chat[CHAT_N_CATS][CHAT_POOL_CAT];
+
 /* The page this module owns. */
 static list_page_t *g_chat;
 static int g_unread_total = 0;   /* sum of unread, filled at build time */
@@ -102,7 +106,8 @@ static void add_chat_item(int cat, const ui_chat_t *c, int tidx)
     it->icon   = c ? (c->group ? I_USERS : I_USER) : I_ENVELOPE;
     it->meta   = g_chat_text[tidx].time;
     it->badge  = c ? (int)c->unread : 0;
-    it->target = PAGE_NONE;   /* opening a conversation: later leg */
+    it->target = PAGE_NONE;   /* activation goes through the page's callback */
+    g_row_chat[cat][i - chat_cat_off[cat]] = (c && tidx < UI_CHAT_MAX) ? tidx : -1;
 }
 
 /* Resolve the chat source into per-category item slices. The MODEL owns the
@@ -251,4 +256,17 @@ void ui_messaging_cycle_cat(int dir)
 int ui_messaging_unread_total(void)
 {
     return g_unread_total;
+}
+
+int ui_messaging_selected_chat(void)
+{
+    if (!g_chat) {
+        return -1;
+    }
+    int cat = ui_list_cat(g_chat);
+    int row = ui_list_sel(g_chat);
+    if (cat >= CHAT_N_CATS || row >= CHAT_POOL_CAT) {
+        return -1;
+    }
+    return g_row_chat[cat][row];
 }

@@ -20,6 +20,17 @@ extern "C" {
 #define UI_MSG_BODY_LEN     256  /* long messages wrap, not truncate   */
 #define UI_MSG_FROM_LEN     16   /* group sender name ("" in 1:1)      */
 
+/* Delivery state on the WAHA WAMessageAck scale (outgoing only):
+ * PENDING = nothing shown, SERVER = one mark, DEVICE = two marks,
+ * READ/PLAYED = two accent marks. WAHA's ERROR (-1) has no value here —
+ * a failed send is known locally by the sender and never reaches the
+ * peer, so the store only carries 0..4. */
+#define UI_MSG_ACK_PENDING 0
+#define UI_MSG_ACK_SERVER  1
+#define UI_MSG_ACK_DEVICE  2
+#define UI_MSG_ACK_READ    3
+#define UI_MSG_ACK_PLAYED  4
+
 /* A divider belongs between two consecutive messages when the gap exceeds
  * this many minutes (or they fall on different days). */
 #define UI_MSG_GAP_MIN 10
@@ -27,6 +38,7 @@ extern "C" {
 typedef struct {
     bool     mine;   /* true = outgoing (right bubble)          */
     uint16_t ts;     /* day*1440 + hh*60 + mm; larger = newer   */
+    uint8_t  ack;    /* WAHA WAMessageAck scale, outgoing only  */
     char     from[UI_MSG_FROM_LEN];  /* group sender, "" in 1:1 */
     char     body[UI_MSG_BODY_LEN];
 } ui_message_t;

@@ -124,6 +124,28 @@ extern "C" {
 #define UI_HOME_HINT_BOTTOM  46   /* key affordance line, from the bottom
                                    * edge (identity at 320x480: 418-46) */
 
+/* Conversation page (spec §14.7): a header slot over a scrollable bubble
+ * column. Bubble widths are derived (UI_PANEL_W - 2*UI_BUBBLE_INSET_X);
+ * text line heights come from the font at build time, not tokens. */
+#define UI_CONV_HDR_H       34   /* chat name + divider line            */
+#define UI_CONV_CARET_X      6   /* back-caret glyph, from the left     */
+#define UI_CONV_CARET_Y     10   /* back-caret glyph, from the top      */
+#define UI_CONV_NAME_X      24   /* chat name label, from the left      */
+#define UI_CONV_NAME_Y       2   /* chat name label, from the top       */
+#define UI_BUBBLE_INSET_X    6   /* screen margin on each side          */
+#define UI_BUBBLE_PAD        6   /* inner padding of a bubble           */
+#define UI_BUBBLE_RADIUS     2   /* nearly square: the UI's design      */
+                                  /* language is radius 0 (rows, cards, */
+                                  /* sidebar); bubbles keep a hint of  */
+                                  /* softness                          */
+#define UI_BUBBLE_GAP_SAME   3   /* between messages in one group       */
+#define UI_BUBBLE_GAP_GROUP  8   /* between groups                      */
+#define UI_TICK_W            3   /* delivery-mark width (px)            */
+#define UI_TICK_H            6   /* delivery-mark height: twice the     */
+                                  /* width, touching the bubble's      */
+                                  /* bottom edge                       */
+#define UI_TICK_GAP          2   /* gap between the two marks           */
+
 /* ================================================================== */
 /* Design tokens — font sizes (pixels)                                 */
 /* ================================================================== */

@@ -4,37 +4,55 @@
     { "name": "Family",          "last": "Dinner at 7, bring bread",  "time": "20:31", "unread": 3, "group": true,  "family": true,  "favorite": true,
       "messages": [
         { "mine": false, "day": 0, "time": "18:30", "from": "Imma", "text": "We're having dinner at 7" },
-        { "mine": true,  "day": 0, "time": "19:12",              "text": "Can't make it — project due tomorrow" },
+        { "mine": true,  "day": 0, "time": "19:12", "ack": 3,     "text": "Can't make it — project due tomorrow" },
         { "mine": false, "day": 0, "time": "19:45", "from": "Abba", "text": "Bring the bread then" },
         { "mine": false, "day": 0, "time": "20:31", "from": "Imma", "text": "Dinner at 7, bring bread" }
       ] },
     { "name": "Alex",            "last": "On my way",                 "time": "20:12", "mine": true,
       "messages": [
         { "mine": false, "day": 0, "time": "19:58", "text": "Are we still on for tonight?" },
-        { "mine": true,  "day": 0, "time": "20:02", "text": "Yes — 8 at the usual place" },
+        { "mine": true,  "day": 0, "time": "20:02", "ack": 3,     "text": "Yes — 8 at the usual place" },
         { "mine": false, "day": 0, "time": "20:03", "text": "The river place is closed on Mondays, so if 8 doesn't work the backup is the old canteen — they check student IDs now." },
-        { "mine": true,  "day": 0, "time": "20:12", "text": "On my way" }
+        { "mine": true,  "day": 0, "time": "20:12", "ack": 2,     "text": "On my way" }
       ] },
-    { "name": "Sam",             "last": "[voice note]",              "time": "19:48", "unread": 1, "favorite": true,
+    { "name": "Sam",             "last": "[voice note]",              "time": "14:12", "mine": true, "favorite": true,
       "messages": [
         { "mine": false, "day": 0, "time": "14:02", "text": "Guess what \ud83d\udc31" },
-        { "mine": true,  "day": 0, "time": "14:05", "text": "The cat from the park??" },
-        { "mine": false, "day": 0, "time": "14:06", "text": "He followed me all the way home \ud83d\ude38\ud83c\udfe0" },
-        { "mine": false, "day": 0, "time": "19:48", "text": "[voice note]" }
+        { "mine": true,  "day": 0, "time": "14:05", "ack": 0,     "text": "No way!!" },
+        { "mine": true,  "day": 0, "time": "14:06", "ack": 1,     "text": "Is that the new place?" },
+        { "mine": true,  "day": 0, "time": "14:07", "ack": 2,     "text": "The cat from the park?!" },
+        { "mine": false, "day": 0, "time": "14:09", "text": "He followed me all the way home \ud83d\ude38\ud83c\udfe0" },
+        { "mine": true,  "day": 0, "time": "14:12", "ack": 3,     "text": "[voice note]" }
       ] },
     { "name": "Grandma",         "last": "Call me when you can",      "time": "18:05", "family": true,
       "messages": [
-        { "mine": true,  "day": 1, "time": "17:40", "text": "Hello Grandma, I'll call you this week" },
+        { "mine": true,  "day": 1, "time": "17:40", "ack": 2,     "text": "Hello Grandma, I'll call you this week" },
         { "mine": false, "day": 1, "time": "18:05", "text": "\u05e2\u05ea\u05dc \u05d0\u05ea\u05d9 \u05e9\u05d4\u05d0\u05da" },
         { "mine": false, "day": 0, "time": "09:12", "text": "\u05d4\u05d0\u05da\u05dc\u05ea? \u05d4\u05d7\u05e8\u05ea\u05ea \u05de\u05e6\u05d4" },
-        { "mine": true,  "day": 0, "time": "09:30", "text": "\u05e2\u05d5\u05d3 \u05d1\u05e6\u05d4\u05e8\u05d9\u05dd, \u05d0\u05e0\u05d7\u05e0\u05d5 \u05d1\u05d1\u05d9\u05ea" },
+        { "mine": true,  "day": 0, "time": "09:30", "ack": 3,     "text": "\u05e2\u05d5\u05d3 \u05d1\u05e6\u05d4\u05e8\u05d9\u05dd, \u05d0\u05e0\u05d7\u05e0\u05d5 \u05d1\u05d1\u05d9\u05ea" },
         { "mine": false, "day": 0, "time": "09:31", "text": "\u05de\u05e2\u05d7\u05d9\u05e8\u05ea \u05dc\u05db \u05e6\u05dc\u05d7. \u05d4\u05e8\u05e4\u05d5\u05d0\u05d0\u05d9\u05dd \u05d0\u05e9\u05e8 \u05e9\u05d4\u05d5\u05ea \u05de\u05e0\u05d7\u05d4" }
       ] },
-    { "name": "Book Club",       "last": "Chapter 4 for Sunday",      "time": "17:40", "unread": 12, "group": true },
+    { "name": "Book Club",       "last": "Chapter 4 for Sunday",      "time": "17:40", "unread": 12, "group": true,
+      "messages": [
+        { "mine": false, "day": 0, "time": "16:50", "from": "Noa", "text": "Anyone finished chapter 3?" },
+        { "mine": true,  "day": 0, "time": "16:52", "ack": 2, "text": "Halfway. The ending threw me" },
+        { "mine": false, "day": 0, "time": "16:55", "from": "Ori", "text": "Do NOT read past page 200" },
+        { "mine": false, "day": 0, "time": "16:58", "from": "Noa", "text": "Why?!" },
+        { "mine": true,  "day": 0, "time": "17:02", "ack": 3, "text": "Because I read it and I am NOT okay" },
+        { "mine": false, "day": 0, "time": "17:10", "from": "Ori", "text": "The bakery scene. Just the bakery scene." },
+        { "mine": true,  "day": 0, "time": "17:15", "ack": 2, "text": "You're all terrifying" },
+        { "mine": false, "day": 0, "time": "17:25", "from": "Noa", "text": "Sunday 10:00, my place. Bring snacks" },
+        { "mine": true,  "day": 0, "time": "17:38", "ack": 3, "text": "There. I'll bring the good ones" },
+        { "mine": false, "day": 0, "time": "17:40", "from": "Ori", "text": "Chapter 4 for Sunday" }
+      ] },
     { "name": "Jordan",          "last": "[image]",                   "time": "16:22" },
     { "name": "Taylor",          "last": "Sounds good, thanks!",      "time": "15:09", "mine": true },
     { "name": "Five-a-side",     "last": "Pitch is booked for Tue",   "time": "13:55", "group": true },
-    { "name": "Dad",             "last": "Did the parcel arrive?",    "time": "11:30", "unread": 2, "family": true },
+    { "name": "Dad",             "last": "Did the parcel arrive?",    "time": "11:30", "unread": 2, "family": true, "sms": true,
+      "messages": [
+        { "mine": false, "day": 0, "time": "11:28", "text": "Did the parcel arrive?" },
+        { "mine": true,  "day": 0, "time": "11:30", "ack": 0, "text": "Yes — at the door. Thanks!" }
+      ] },
     { "name": "Neighbourhood",   "last": "Lost cat near the park",    "time": "09:14", "group": true },
     { "name": "Riley",           "last": "See you tomorrow",          "time": "yest" },
     { "name": "Dentist",         "last": "Reminder: Thu 10:00",       "time": "yest" }
