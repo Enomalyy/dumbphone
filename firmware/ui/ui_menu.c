@@ -16,6 +16,7 @@
 
 #include "ui/ui_menu.h"
 #include "ui/ui_pages.h"
+#include "ui/ui_settings.h"
 #include "ui/ui_text.h"
 #include "ui/ui_theme.h"
 
@@ -85,6 +86,13 @@ struct ui_list_page {
     ui_list_gesture_cb gesture_cb;       /* horizontal-swipe handler   */
     ui_list_cat_cb     cat_cb;           /* tray-cell tap -> setter    */
     ui_list_activate_cb activate_cb;     /* tap-activate handler       */
+    /* §14.2 moving carousel: while a slide is in flight, `strip_px` is the
+     * offset (px) added to every cell's base x — it jumps to two thirds of
+     * one column on a category change and settles to 0 after STRIP_ANIM_MS.
+     * The state itself changes at the press; this is garnish only. */
+    int          strip_px;        /* current slide offset (px)      */
+    uint32_t     strip_anim_start;/* lv_tick when the slide began   */
+    lv_timer_t  *strip_tmr;       /* settles the slide (UI thread)  */
     lv_obj_t *rows[MENU_MAX_ITEMS];
     lv_obj_t *row_caret[MENU_MAX_ITEMS];
     lv_obj_t *row_num[MENU_MAX_ITEMS];
@@ -283,8 +291,11 @@ static void place_cell(list_page_t *p, int idx, int cx)
     }
 }
 
-/* The ONE source of tray-cell geometry: §14.5 sizing plus the cell's x —
- * even columns across the width (the shipped layout). */
+/* The ONE source of tray-cell geometry: §14.5 sizing plus the cell's x.
+ * Static carousel: even columns across the width (the shipped layout).
+ * Moving carousel (§14.2): the selected cell sits at panel centre with its
+ * neighbours one column to each side, and every cell carries the slide's
+ * current offset while it is in flight. */
 static void layout_strip(list_page_t *p)
 {
     menu_t *m = p->m;
@@ -293,8 +304,22 @@ static void layout_strip(list_page_t *p)
     }
     int n = m->n_cats;
     int cell_w = PANEL_W / n;
+    bool moving = ui_settings_menu_style() == MENU_STYLE_MOVING;
     for (int i = 0; i < n; i++) {
-        place_cell(p, i, cell_w * i + cell_w / 2);
+        int cx;
+        if (moving) {
+            /* Shortest signed distance from the selected category: the
+             * strip wraps, so a cell two away on one side is one away on
+             * the other. The selected cell lands exactly at panel centre. */
+            int d = (i - m->cat_sel + n) % n;
+            if (d > n / 2) {
+                d -= n;
+            }
+            cx = PANEL_W / 2 + d * cell_w + p->strip_px;
+        } else {
+            cx = cell_w * i + cell_w / 2;
+        }
+        place_cell(p, i, cx);
     }
 }
 
@@ -672,6 +697,39 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
     return p;
 }
 
+/* §14.2: the moving carousel's slide is two frames — on a category change
+ * the strip jumps to two thirds of the way (immediate feedback) and settles
+ * the rest after STRIP_ANIM_MS. The state itself changed at the press; this
+ * is garnish and never blocks input. */
+#define STRIP_ANIM_MS 200
+
+static int strip_step_px(int dir, int cell_w)
+{
+    /* Two thirds of one column, rounded to whole pixels. */
+    long a = (long)dir * cell_w * 2;
+    long q = a / 3;
+    long r = a % 3;
+    if (r < 0) {
+        r += 3;
+    }
+    return (int)(q + (r >= 2 ? (a > 0 ? 1 : -1) : 0));
+}
+
+static void strip_settle_cb(lv_timer_t *tmr)
+{
+    list_page_t *p = lv_timer_get_user_data(tmr);
+    if (!p->strip_px) {
+        return;   /* already settled */
+    }
+    if (lv_tick_get() - p->strip_anim_start < STRIP_ANIM_MS) {
+        return;
+    }
+    p->strip_px = 0;
+    layout_strip(p);
+    p->strip_tmr = NULL;
+    lv_timer_delete(tmr);
+}
+
 void ui_list_set_category(list_page_t *p, uint8_t cat)
 {
     menu_t *m = p ? p->m : NULL;
@@ -681,7 +739,26 @@ void ui_list_set_category(list_page_t *p, uint8_t cat)
     if (cat >= m->n_cats) {
         return;
     }
+    uint8_t old = m->cat_sel;
     m->cat_sel = cat;
+
+    /* §14.2: in the moving style a category change slides the strip —
+     * two frames of garnish on top of the immediate state change. The
+     * direction is the shortest way round the wrap, so a jump from the
+     * last category to the first slides one column, not n-1. */
+    if (cat != old && ui_settings_menu_style() == MENU_STYLE_MOVING) {
+        int n = m->n_cats;
+        int d = (cat - old + n) % n;
+        if (d > n / 2) {
+            d -= n;
+        }
+        p->strip_px = strip_step_px(d, PANEL_W / n);
+        p->strip_anim_start = lv_tick_get();
+        if (!p->strip_tmr) {
+            p->strip_tmr = lv_timer_create(strip_settle_cb, 16, p);
+        }
+    }
+
     for (int i = 0; i < m->n_cats; i++) {
         style_cell(p, i);
     }

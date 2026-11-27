@@ -38,6 +38,13 @@ menu-settings           panel --screen menu --cycle right 3
 menu-tap-cat            panel --screen menu --tap 120 41
 menu-grid               panel --screen menu --menu-style grid
 menu-grid-maps          panel --screen menu --menu-style grid --cycle right 2
+# §14.2: the moving carousel — the selected category sits at panel centre.
+# Final states settle past the 200 ms slide (--settle 30); the mid-slide
+# frame freezes inside the settle window (--settle 8).
+menu-moving             panel --screen menu --menu-style moving
+menu-moving-calls       panel --screen menu --menu-style moving --cycle right 1 --settle 30
+menu-moving-mid         panel --screen menu --menu-style moving --key right --settle 8
+chat-moving             panel --screen chat --menu-style moving --cycle right 1 --settle 30
 settings                panel --screen settings
 settings-grid           panel --screen settings --menu-style grid
 speeddials              panel --screen speeddials
