@@ -276,9 +276,8 @@ ui_font_pref_t ui_font_pref(ui_font_role_t role);
 void ui_font_face_next(ui_font_role_t role);
 void ui_font_size_next(ui_font_role_t role);
 
-/* The sizes a role offers, in ring order (entry 0 = the shipped default).
- * *px points at the table; returns the count. */
-int ui_font_sizes(ui_font_role_t role, const uint8_t **px);
+/* The sizes a role offers, in ring order (entry 0 = the shipped default). */
+void ui_font_size_next(ui_font_role_t role);
 
 /* Face by short name ("SILK", any case) — the harness CLI's --font spec.
  * Returns the ui_face_t id, or -1 when the name is unknown. */

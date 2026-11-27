@@ -8,6 +8,7 @@
  */
 #include "model/settings.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -210,37 +211,49 @@ int model_settings_heldpress_slot(int hal_key)
 #define SETTINGS_FILE  "settings"
 #define SETTINGS_VER   "1"
 
+/* Append one formatted line, never moving `off` past the buffer: a full
+ * buffer stops taking text instead of running the pointer off the end (the
+ * old `off += snprintf()` pattern grew `off` past the array once the text
+ * outgrew it, and the next `buf + off` was out of bounds). */
+static void app(char *buf, size_t cap, int *off, const char *fmt, ...)
+{
+    if (*off < 0 || (size_t)*off + 1 >= cap) {
+        return;
+    }
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf + *off, cap - (size_t)*off, fmt, ap);
+    va_end(ap);
+    if (n > 0) {
+        *off += n;
+        if ((size_t)*off >= cap) {
+            *off = (int)cap - 1;   /* keep the terminator's byte */
+        }
+    }
+}
+
 int model_settings_save(void)
 {
     char buf[768];
     int off = 0;
     const model_settings_t *s = &g_settings;
 
-    off += snprintf(buf + off, sizeof buf - off, "%s\n", SETTINGS_VER);
-    off += snprintf(buf + off, sizeof buf - off, "menu_style=%u\n",
-                    s->menu_style);
-    off += snprintf(buf + off, sizeof buf - off, "call_pref=%u\n",
-                    s->call_pref);
-    off += snprintf(buf + off, sizeof buf - off, "theme=%u\n", s->theme);
-    off += snprintf(buf + off, sizeof buf - off, "softkeys=%d\n",
-                    s->softkeys ? 1 : 0);
+    app(buf, sizeof buf, &off, "%s\n", SETTINGS_VER);
+    app(buf, sizeof buf, &off, "menu_style=%u\n", s->menu_style);
+    app(buf, sizeof buf, &off, "call_pref=%u\n", s->call_pref);
+    app(buf, sizeof buf, &off, "theme=%u\n", s->theme);
+    app(buf, sizeof buf, &off, "softkeys=%d\n", s->softkeys ? 1 : 0);
     for (int r = 0; r < MODEL_SETTINGS_FONT_ROLES; r++) {
         const char *k = r == 0 ? "font_header" : r == 1 ? "font_text"
                         : "font_subtext";
-        off += snprintf(buf + off, sizeof buf - off, "%s=%u:%u\n", k,
-                        s->fonts[r].face, s->fonts[r].px);
+        app(buf, sizeof buf, &off, "%s=%u:%u\n", k, s->fonts[r].face,
+            s->fonts[r].px);
     }
     for (int i = 0; i < MODEL_SETTINGS_SPEEDDIAL_N; i++) {
-        char key[16];
-        snprintf(key, sizeof key, "speeddial_%d", i);
-        off += snprintf(buf + off, sizeof buf - off, "%s=%s\n", key,
-                        s->speeddial[i]);
+        app(buf, sizeof buf, &off, "speeddial_%d=%s\n", i, s->speeddial[i]);
     }
     for (int i = 0; i < MODEL_SETTINGS_HELDPRESS_N; i++) {
-        char key[16];
-        snprintf(key, sizeof key, "heldpress_%d", i);
-        off += snprintf(buf + off, sizeof buf - off, "%s=%u\n", key,
-                        s->heldpress[i]);
+        app(buf, sizeof buf, &off, "heldpress_%d=%u\n", i, s->heldpress[i]);
     }
     return hal_storage_write_file(HAL_STORAGE_USER, SETTINGS_FILE, buf,
                                   (size_t)off);

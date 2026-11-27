@@ -238,3 +238,11 @@ also steps down when the cap is narrower than "OPTIONS" needs (never at 320 or 2
 text cannot spill over its border. Frames that moved: every non-320 geometry scene
 (`*-240x320`, `*-240x400`, `*-480x800`, `*-480x640`, `*-1280x720`, `*-200x350`,
 `window-home-480x800`, `window-chat-digit-5-240x320`).
+
+## 21. Conversations group by side again (27/11, audit)
+
+`build_chain()` took the between-groups gap for every pair and, on the first message, read
+`msgs[-1]` inside a branch that could never be right. The gap is now chosen by side — same side
+3 px (`UI_BUBBLE_GAP_SAME`), a change of side 8 px (`UI_BUBBLE_GAP_GROUP`) — and a meaningful
+time gap still draws its divider. The six `conv-*` frames were re-shot for it; this is the
+first frame move since R1 that the spec already described but the code did not do.

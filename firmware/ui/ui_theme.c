@@ -186,11 +186,23 @@ static const uint8_t g_size_n[UI_FONT_ROLE_COUNT] = { 2, 3, 2 };
 static ui_palette_t  g_pal;
 static void        (*g_apply_cb)(void);
 
+/* The shipped default of each role. Also the fallback when the stored
+ * preference is out of range (a corrupt or hand-edited settings file must
+ * never make a role render in another role's face/size). */
+static const ui_font_pref_t g_font_default[UI_FONT_ROLE_COUNT] = {
+    [UI_FONT_HEADER]  = { UI_FACE_SILKSCREEN, UI_FONT_TITLE_PX },
+    [UI_FONT_TEXT]    = { UI_FACE_VT323,      UI_FONT_BODY_L_PX },
+    [UI_FONT_SUBTEXT] = { UI_FACE_PIXELIFY,   UI_FONT_BODY_M_PX },
+};
+
 ui_font_pref_t ui_font_pref(ui_font_role_t role)
 {
-    ui_font_pref_t p = { UI_FACE_SILKSCREEN, UI_FONT_TITLE_PX };
-    if ((unsigned)role < UI_FONT_ROLE_COUNT) {
-        const model_font_pref_t *m = &model_settings()->fonts[role];
+    if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
+        return g_font_default[UI_FONT_TEXT];
+    }
+    ui_font_pref_t p = g_font_default[role];
+    const model_font_pref_t *m = &model_settings()->fonts[role];
+    if (m->face < UI_FACE_COUNT && m->px >= 8 && m->px <= 160) {
         p.face = (ui_face_t)m->face;
         p.px   = m->px;
     }
@@ -229,16 +241,6 @@ void ui_font_size_next(ui_font_role_t role)
     if (g_apply_cb) {
         g_apply_cb();
     }
-}
-
-int ui_font_sizes(ui_font_role_t role, const uint8_t **px)
-{
-    if ((unsigned)role >= UI_FONT_ROLE_COUNT) {
-        if (px) *px = NULL;
-        return 0;
-    }
-    if (px) *px = g_sizes[role];
-    return g_size_n[role];
 }
 
 int ui_face_lookup(const char *name)

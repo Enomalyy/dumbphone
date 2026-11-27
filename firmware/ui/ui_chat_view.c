@@ -159,10 +159,14 @@ static void build_chain(void)
     for (int i = 0; i < g_count; i++) {
         const ui_message_t *m = &g_cur.msgs[i];
 
-        /* Group boundary: a new side, and — when the gap is meaningful —
-         * a divider chip between the groups. */
+        /* Group boundary: consecutive messages from the SAME side sit tight
+         * (GAP_SAME); a change of side opens a new group (GAP_GROUP). A
+         * meaningful time gap also draws a divider chip. (This branch used
+         * to read msgs[-1] for the first message and take the group gap on
+         * every pair, so a same-side run never grouped.) */
         if (i > 0) {
-            y += UI_BUBBLE_GAP_GROUP;
+            y += (g_cur.msgs[i - 1].mine == m->mine)
+                     ? UI_BUBBLE_GAP_SAME : UI_BUBBLE_GAP_GROUP;
             if (ui_msg_needs_divider(&g_cur.msgs[i - 1], m)) {
                 char tbuf[24];
                 ui_msg_time_fmt(m->ts, tbuf, sizeof tbuf);
@@ -176,8 +180,6 @@ static void build_chain(void)
                 lv_obj_align(g_divider[i], LV_ALIGN_TOP_MID, 0, y);
                 y += line_h;
             }
-        } else if (m->mine == g_cur.msgs[i - 1].mine) {
-            y += UI_BUBBLE_GAP_SAME;
         }
 
         /* Group senders ride above the body, incoming side only. */

@@ -26,6 +26,9 @@ void model_messages_set(int chat_idx, const ui_message_t *msgs, int n)
     if (!msgs || chat_idx < 0 || chat_idx >= UI_CHAT_MAX) {
         return;
     }
+    if (n < 0) {
+        n = 0;   /* a source error must not turn into a huge memcpy */
+    }
     if (n > UI_MSG_MAX_PER_CHAT) {
         n = UI_MSG_MAX_PER_CHAT;
     }

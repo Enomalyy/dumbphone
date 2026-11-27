@@ -135,6 +135,7 @@ add_executable(test-host
     ${FW_DIR}/test/test_host.c
     ${FW_DIR}/ui/ui_text.c
     ${FW_DIR}/ui/ui_geometry.c
+    ${FW_DIR}/ui/ui_theme.c
     ${FW_DIR}/model/chat_model.c
     ${FW_DIR}/model/messages.c
     ${FW_DIR}/model/settings.c

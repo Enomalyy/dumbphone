@@ -18,6 +18,7 @@
 #include "hal/hal_storage.h"
 #include "model/chat_model.h"
 #include "model/settings.h"
+#include "ui/ui_theme.h"
 #include "ui/ui_geometry.h"
 #include "ui/ui_input.h"
 #include "ui/ui_text.h"
@@ -140,6 +141,24 @@ static void test_ui_geometry(void)
     ui_geometry_set_softkeys(true);
     CHECK(ui_geom_softkeys() == true, "geom softkeys: flag on");
 
+    /* Soft-key caps (issue #14): three derived caps always fit the panel.
+     * The 320 identity is the old 98/104 pair; every other width keeps the
+     * third cap on the panel. */
+    static const int cap_widths[] = { 120, 200, 240, 320, 480, 1280 };
+    for (unsigned i = 0; i < sizeof cap_widths / sizeof cap_widths[0]; i++) {
+        int w = cap_widths[i];
+        ui_geometry_set(w, 480);
+        int cw = ui_sk_cap_w();
+        int pitch = ui_sk_cap_pitch();
+        CHECK(cw > 0 && pitch > cw, "geom caps: width and pitch positive");
+        CHECK(UI_SK_CAP_INSET + 2 * pitch + cw <= w,
+              "geom caps: all three fit the panel");
+        if (w == 320) {
+            CHECK(cw == 98 && pitch == 104, "geom caps: 320 identity 98/104");
+        }
+    }
+    ui_geometry_set(320, 480);
+
     /* Out-of-range sizes are clamped to the sane window. */
     ui_geometry_set(50, 50);
     CHECK(ui_geom_w() == 120 && ui_geom_h() == 160, "geom clamp: 50x50 -> 120x160");
@@ -243,6 +262,46 @@ static void test_model_chats(void)
 }
 
 /* ------------------------------------------------------------------ */
+/* font preferences — the two independent rings (issue #16), and the   */
+/* corrupt-value fallback that keeps each role on its own default.     */
+/* ------------------------------------------------------------------ */
+
+static void test_ui_font_prefs(void)
+{
+    CHECK(ui_face_lookup("silk") == UI_FACE_SILKSCREEN,
+          "font: face lookup by short name");
+    CHECK(ui_face_lookup("Silkscreen") == UI_FACE_SILKSCREEN,
+          "font: face lookup by full name");
+    CHECK(ui_face_lookup("nope") < 0, "font: unknown face rejected");
+
+    model_settings_reset();
+
+    /* The FACE ring keeps the size; the SIZE ring keeps the face. */
+    ui_font_pref_t a = ui_font_pref(UI_FONT_HEADER);
+    ui_font_face_next(UI_FONT_HEADER);
+    ui_font_pref_t b = ui_font_pref(UI_FONT_HEADER);
+    CHECK(b.px == a.px, "font: face change keeps the size");
+    CHECK(b.face != a.face, "font: face change moves the face");
+
+    ui_font_size_next(UI_FONT_HEADER);
+    ui_font_pref_t c = ui_font_pref(UI_FONT_HEADER);
+    CHECK(c.face == b.face, "font: size change keeps the face");
+    CHECK(c.px != b.px, "font: size change moves the size");
+
+    /* A stored value outside the rings falls back to THAT role's default,
+     * not to another role's face/size (the old fallback was header's). */
+    model_settings_set_font(UI_FONT_SUBTEXT, 200, 16);
+    CHECK(ui_font_pref(UI_FONT_SUBTEXT).face == UI_FACE_PIXELIFY,
+          "font: corrupt face falls back to the role default");
+    model_settings_set_font(UI_FONT_TEXT, UI_FACE_VT323, 0);
+    CHECK(ui_font_pref(UI_FONT_TEXT).px == UI_FONT_BODY_L_PX,
+          "font: corrupt size falls back to the role default");
+
+    hal_storage_remove(HAL_STORAGE_USER, "settings");
+    model_settings_reset();
+}
+
+/* ------------------------------------------------------------------ */
 /* model settings — the round-trip through hal_storage (spec §16.4).  */
 /* Mutate, save, wipe memory, load: every value must come back. The    */
 /* parser's leniency is pinned too: unknown keys ignored, missing     */
@@ -262,7 +321,9 @@ static void test_model_settings(void)
     model_settings_set_menu_style(MODEL_MENU_GRID);
     model_settings_set_theme(MODEL_THEME_LIGHT);
     model_settings_set_softkeys(false);
-    model_settings_set_font(1, 3, 20);
+    model_settings_set_font(0, 3, 32);   /* Headers  Jersey 32 */
+    model_settings_set_font(1, 3, 20);   /* Text     Jersey 20 */
+    model_settings_set_font(2, 0, 20);   /* Subtext  VT323  20 */
     model_settings_set_speeddial(2, "Work");
     model_settings_cycle_heldpress(1);   /* slot 1: none -> new message */
 
@@ -277,8 +338,12 @@ static void test_model_settings(void)
     CHECK(s->menu_style == MODEL_MENU_GRID, "settings: menu style round-trip");
     CHECK(s->theme == MODEL_THEME_LIGHT, "settings: theme round-trip");
     CHECK(s->softkeys == false, "settings: softkeys round-trip");
+    CHECK(s->fonts[0].face == 3 && s->fonts[0].px == 32,
+          "settings: header font round-trip");
     CHECK(s->fonts[1].face == 3 && s->fonts[1].px == 20,
-          "settings: font round-trip");
+          "settings: text font round-trip");
+    CHECK(s->fonts[2].face == 0 && s->fonts[2].px == 20,
+          "settings: subtext font round-trip");
     CHECK(strcmp(s->speeddial[2], "Work") == 0, "settings: speeddial round-trip");
     CHECK(s->heldpress[1] == MODEL_HP_NEW_MESSAGE, "settings: heldpress round-trip");
 
@@ -322,6 +387,7 @@ int main(void)
     test_ui_geometry();
     test_key_repeat();
     test_model_chats();
+    test_ui_font_prefs();
     test_model_settings();
 
     printf("test-host: %d passed, %d failed\n", n_pass, n_fail);

@@ -122,7 +122,7 @@ static void refresh_theme_meta(void)
     ui_theme_id_t cur = ui_theme_get();
     for (int i = 0; i < UI_THEME_COUNT; i++) {
                 g_theme_items[i].label = ui_theme_name((ui_theme_id_t)i);
-        g_theme_items[i].meta  = (i == cur) ? "ACTIVE" : NULL;
+        g_theme_items[i].meta  = ((int)i == (int)cur) ? "ACTIVE" : NULL;
     }
 }
 
@@ -340,11 +340,9 @@ ui_setting_effect_t ui_settings_theme_activate(uint8_t sel)
 
 ui_setting_effect_t ui_settings_font_activate(uint8_t sel)
 {
-    if (sel >= UI_FONT_ROLE_COUNT) {
-        return UI_SETTING_EFFECT_NONE;
-    }
-    /* The Font page's rows navigate to the role page; they no longer cycle
-     * anything themselves (issue #16). */
+    (void)sel;
+    /* The Font page's rows navigate to the role page; they cycle nothing
+     * themselves (issue #16). Kept so a future caller has the slot. */
     return UI_SETTING_EFFECT_NONE;
 }
 
