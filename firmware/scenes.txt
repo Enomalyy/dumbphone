@@ -37,6 +37,9 @@ menu-settings           panel --screen menu --cycle right 3
 # key-driven equivalents pixel-for-pixel.
 menu-tap-cat            panel --screen menu --tap 120 41
 menu-grid               panel --screen menu --menu-style grid
+# Grid style with the SHOULDER-L sidebar open — the §14.3 rework dropped the
+# old options-grid scene and left this combination uncovered; restored here.
+menu-grid-sidebar       panel --screen menu --menu-style grid --key shoulder-l
 menu-grid-maps          panel --screen menu --menu-style grid --cycle right 2
 # §14.2: the moving carousel — the selected category sits at panel centre.
 # Final states settle past the 200 ms slide (--settle 30); the mid-slide
