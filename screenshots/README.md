@@ -4,6 +4,21 @@ Every frame here is reproducible from the CLI: `just shot-desktop` / `just shot-
 the clock at 20:36, so "AE=0 against yesterday" means something. Run from `firmware/` after
 `just build-desktop`.
 
+**The gate (spec §16.1):** `firmware/scenes.txt` is the machine-readable recipe list — one
+line per scene (`<frame> <panel|window> <flags…>`), covering every frame in this folder except
+the documented exclusions. The tables below are its human view; if they drift, `scenes.txt`
+wins. The commands:
+
+- `just golden-check` — render every scene to a temp dir and compare pixels against the
+  committed frames. Read-only here; fails naming each bad scene. Also fails if a committed
+  frame has no recipe, so nothing drops out silently.
+- `just golden-update` — the ONLY way a frame in this folder changes: rewrites the PNGs from
+  `scenes.txt`. A commit that moves pixels must name the frames it moves and why (§16.6).
+- `just check` — build + golden-check + host unit tests; the one-command local gate.
+
+Compare pixels, not bytes: ImageMagick embeds a `tIME` chunk in PNGs it writes, so two renders
+of the same state differ as bytes but are identical as pixels.
+
 Two forms:
 
 - **just** — `just shot-desktop <screen> [cycledir cyclen] [activate] [menustyle]`
@@ -62,15 +77,15 @@ free-form 200×350, plus `window-home-480x800` / `window-chat-digit-5-240x320`
 (bezel re-layout at those sizes). Acceptance bar: legible, no crash, nothing
 drawn outside the panel — not pixel-perfect at every size.
 
-Regenerate everything above, then compare pixels (not bytes: magick re-encodes):
+To re-verify by hand, render a scene and compare pixels (not bytes: magick re-encodes):
 
 ```sh
-python3 -c "from PIL import Image,ImageChops;print(ImageChops.difference(
-  Image.open('a.png').convert('RGB'),Image.open('b.png').convert('RGB')).getbbox())"
+./build-host/dumbphone-desktop --shot /tmp/a.ppm --screen chat --no-server
+magick ../screenshots/chat.png /tmp/b.ppm && cmp /tmp/a.ppm /tmp/b.ppm
 ```
 
-A non-`None` box means the frame really changed — decide whether that was intended before
-committing it.
+A difference means the frame really changed — decide whether that was intended before
+committing it, and if so re-shoot with `just golden-update`.
 
 **Adding a frame needs `git add -f`:** the home-directory repo ignores `*.png` globally, so a
 plain `git add` reports "ignored" and the frame silently never reaches the commit.

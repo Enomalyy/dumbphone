@@ -134,9 +134,43 @@ shot-window screen="chat" press="none": build-desktop
 # Alias kept for harness-setup.md's vocabulary.
 build-host: build-desktop
 
-# Host unit tests: next phase (Unity/CMock), nothing to run yet.
-test-host:
-    @echo "not wired yet: host unit tests (Unity/CMock)"
+# ---- golden-frame gate (spec §16.1, issue #7) ---------------------------
+#
+# scenes.txt is the recipe list for every committed frame in ../screenshots/
+# (one line per scene; browser-viewport.png is the documented exclusion).
+# Shot mode freezes the clock at 20:36, so every scene is reproducible at
+# any time. Comparison is on raw pixels (rendered PPM vs the committed PNG
+# converted to PPM — ImageMagick embeds a tIME chunk in PNGs it writes, so
+# byte-comparing PNGs is not a meaningful check).
+#
+# Run with no live dumbphone-desktop instance active: two instances share
+# firmware/data/ (the storage stub's directory) and port 8099 when the
+# server is on.
+
+# Check every scene against its committed frame. Renders into a temp dir and
+# never touches ../screenshots/. Fails loudly, naming each scene that differs,
+# and also fails if a committed frame has no recipe in scenes.txt (so a frame
+# can never silently drop out of the gate).
+golden-check: build-desktop
+    ./golden.sh check
+
+# Rewrite the committed frames from scenes.txt — the ONLY way a golden frame
+# changes. Use after a deliberate pixel-moving change, then name the frames
+# and why in the commit (ui-architecture.md §16.6).
+golden-update: build-desktop
+    ./golden.sh update
+
+# Host unit tests: the data-text direction rule (ui_text) and the geometry
+# derivations (ui_geometry). Display-free; built by build-desktop.
+test-host: build-desktop
+    ./build-host/test-host
+
+# The one-command local gate: build + goldens + tests. Fast enough for every
+# commit. Local only — the public repo is a publish mirror, so there is no
+# CI workflow for it.
+check: build-desktop
+    ./golden.sh check
+    ./build-host/test-host
 
 # ---- housekeeping --------------------------------------------------------
 

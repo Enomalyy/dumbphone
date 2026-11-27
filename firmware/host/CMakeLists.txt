@@ -119,3 +119,19 @@ target_link_libraries(dumbphone-desktop PRIVATE
     pthread
     m
 )
+
+# ---- host unit tests (spec §16.1, issue #7) ----------------------------
+# Display-free tests for the pure UI modules: the data-text direction rule
+# and the geometry derivations. No framework — main() + checks + a
+# PASS/FAIL summary; exit 0 iff everything passes. `just test-host` runs it,
+# `just check` includes it in the local gate.
+add_executable(test-host
+    ${FW_DIR}/test/test_host.c
+    ${FW_DIR}/ui/ui_text.c
+    ${FW_DIR}/ui/ui_geometry.c
+)
+target_include_directories(test-host PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${FW_DIR}
+)
+target_link_libraries(test-host PRIVATE lvgl)
