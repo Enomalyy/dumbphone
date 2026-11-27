@@ -3,6 +3,10 @@
 # Completely independent of the ESP-IDF build: ESP-IDF consumes
 # ../CMakeLists.txt, this file is configured on its own into ../build-host.
 # `just build-desktop` drives it; `just build-s3` is untouched.
+#
+# What is listed here is only the simulator's own files (its backends and main).
+# The ui/, model/ and hal/ boundaries come from ../libs.txt through
+# ../sources.cmake — the same boundaries the IDF build registers as components.
 
 cmake_minimum_required(VERSION 3.16)
 project(dumbphone-desktop C)
@@ -43,6 +47,9 @@ find_library(JPEG_LIBRARY NAMES jpeg
              REQUIRED)
 
 # ---- LVGL (vendored, pinned tag v9.4.0) -----------------------------------
+# One checkout for every build: this subdirectory and the IDF component both
+# point at vendor/lvgl (issue #17). The device build uses the same tree through
+# its own component wrapper.
 set(LVGL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../vendor/lvgl")
 if(NOT EXISTS "${LVGL_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "LVGL not found at ${LVGL_DIR}. Run `just vendor` or:\n"
@@ -61,9 +68,24 @@ add_subdirectory(${LVGL_DIR} ${CMAKE_BINARY_DIR}/lvgl)
 # a warning in OUR code can never hide in third-party noise.
 target_compile_options(lvgl PRIVATE -Wno-unused-but-set-variable)
 
-# ---- the simulator --------------------------------------------------------
+# ---- the boundaries --------------------------------------------------------
 set(FW_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+include(${FW_DIR}/sources.cmake)
+add_subdirectory(${FW_DIR}/ui ${CMAKE_BINARY_DIR}/dp_ui)
+add_subdirectory(${FW_DIR}/model ${CMAKE_BINARY_DIR}/dp_model)
+add_subdirectory(${FW_DIR}/hal ${CMAKE_BINARY_DIR}/dp_hal)
 
+# The simulator's side of the port seam (ui/ui_port.h). The device side lives in
+# hal/esp32s3/ and is compiled only by the IDF build.
+add_library(dp_port STATIC src/ui_port_host.c)
+target_include_directories(dp_port PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${FW_DIR})
+target_link_libraries(dp_port PUBLIC lvgl dp_hal pthread)
+# Font assets are resolved at runtime; bake the source-tree path in. A device
+# build has no filesystem: faces come from the copy embedded in the image.
+target_compile_definitions(dp_port PRIVATE
+    FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts")
+
+# ---- the simulator --------------------------------------------------------
 add_executable(dumbphone-desktop
     src/main.c
     src/hal_sdl_display.c
@@ -72,42 +94,15 @@ add_executable(dumbphone-desktop
     src/frame_server.c
     src/chat_source_json.c
     src/hal_stubs.c
-    ${FW_DIR}/ui/ui_shell.c
-    ${FW_DIR}/ui/ui_home.c
-    ${FW_DIR}/ui/ui_messaging.c
-    ${FW_DIR}/ui/ui_input.c
-    ${FW_DIR}/ui/ui_leaf.c
-    ${FW_DIR}/ui/ui_mainmenu.c
-    ${FW_DIR}/ui/ui_sidebar.c
-    ${FW_DIR}/ui/ui_keymap.c
-    ${FW_DIR}/ui/ui_geometry.c
-    ${FW_DIR}/ui/ui_theme.c
-    ${FW_DIR}/ui/ui_text.c
-    ${FW_DIR}/ui/font_pixelify_m.c
-    ${FW_DIR}/ui/ui_menu.c
-    ${FW_DIR}/ui/ui_chat_view.c
-    ${FW_DIR}/ui/ui_options.c
-    ${FW_DIR}/ui/ui_settings.c
-    ${FW_DIR}/ui/ui_speeddial.c
-    ${FW_DIR}/ui/ui_heldpress.c
-    ${FW_DIR}/ui/ui_calls.c
-    ${FW_DIR}/model/chat_model.c
-    ${FW_DIR}/model/contacts.c
-    ${FW_DIR}/model/call_log.c
-    ${FW_DIR}/model/messages.c
-    ${FW_DIR}/model/settings.c
 )
 
 target_include_directories(dumbphone-desktop PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${FW_DIR}                 # ui/, hal/ headers as "ui/..." and "hal/..."
     ${SDL2_INCLUDE_DIR}
     ${JPEG_INCLUDE_DIR}
 )
 
-# Font assets are resolved at runtime; bake the source-tree path in.
 target_compile_definitions(dumbphone-desktop PRIVATE
-    FONT_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts"
     CHAT_DATA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/data/chats.json"
     CHAT_SAMPLE_PATH="${FW_DIR}/fixtures/chats.sample.json"
 )
@@ -116,10 +111,11 @@ target_compile_definitions(dumbphone-desktop PRIVATE
 # the bytes/areas pushed through hal_display_blit*, summary at exit.
 if(FLUSH_STATS)
     target_compile_definitions(dumbphone-desktop PRIVATE UI_FLUSH_STATS=1)
+    target_compile_definitions(dp_port PRIVATE UI_FLUSH_STATS=1)
 endif()
 
 target_link_libraries(dumbphone-desktop PRIVATE
-    lvgl
+    dp_ui dp_model dp_hal dp_port
     ${SDL2_LIBRARY}
     ${JPEG_LIBRARY}
     pthread
@@ -130,19 +126,7 @@ target_link_libraries(dumbphone-desktop PRIVATE
 # Display-free tests for the pure UI modules: the data-text direction rule
 # and the geometry derivations. No framework — main() + checks + a
 # PASS/FAIL summary; exit 0 iff everything passes. `just test-host` runs it,
-# `just check` includes it in the local gate.
-add_executable(test-host
-    ${FW_DIR}/test/test_host.c
-    ${FW_DIR}/ui/ui_text.c
-    ${FW_DIR}/ui/ui_geometry.c
-    ${FW_DIR}/ui/ui_theme.c
-    ${FW_DIR}/model/chat_model.c
-    ${FW_DIR}/model/messages.c
-    ${FW_DIR}/model/settings.c
-    src/hal_stubs.c
-)
-target_include_directories(test-host PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${FW_DIR}
-)
-target_link_libraries(test-host PRIVATE lvgl)
+# `just check` includes it in the local gate. Same boundaries, no file list of
+# its own: the linker pulls only the objects the tests reference.
+add_executable(test-host ${FW_DIR}/test/test_host.c src/hal_stubs.c)
+target_link_libraries(test-host PRIVATE dp_ui dp_model dp_hal dp_port)

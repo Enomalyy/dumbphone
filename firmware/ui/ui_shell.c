@@ -17,10 +17,8 @@
  * the hot path (draw buffer, rows, and stack are all static).
  */
 
-#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>   /* atexit(), UI_FLUSH_STATS builds only */
 #include <string.h>
 #include <time.h>
 
@@ -35,6 +33,7 @@
 #include "ui_keymap.h"
 #include "ui_menu.h"
 #include "ui_pages.h"
+#include "ui_port.h"
 #include "ui_home.h"
 #include "ui_messaging.h"
 #include "ui_input.h"
@@ -80,12 +79,6 @@
 /* Static state (no dynamic allocation in the hot path)                */
 /* ------------------------------------------------------------------ */
 
-/* Full-frame RGB565 draw buffer (2 bytes/px). Heap: the panel size is a
- * runtime value (ui_geometry.c, spec §15), so it cannot be a static array.
- * Allocated once in ui_shell_init(); no allocation in the hot path, and the
- * panel format matches LV_COLOR_FORMAT_RGB565 exactly. */
-static uint8_t *draw_buf;
-
 static lv_font_t *f_chrome;    /* Silkscreen — status bar, soft keys     */
 static lv_font_t *f_chrome_s;  /* Silkscreen small — tabs                */
 static lv_font_t *f_title;     /* HEADER role  — titles                  */
@@ -123,106 +116,20 @@ static int stack_top = 0;
 static bool end_armed = false;
 
 static bool quit_requested = false;
-static pthread_t ui_thread_id;   /* the one and only thread allowed to touch LVGL */
 
 /* Cross-thread request slot: producers write here, the UI thread consumes it.
- * One slot is enough for the skeleton (last request wins). */
-static pthread_mutex_t req_lock = PTHREAD_MUTEX_INITIALIZER;
+ * One slot is enough for the skeleton (last request wins). The lock and the
+ * thread identity are the port's (ui_port.h): this file does not know what a
+ * thread is on the device. */
 static bool req_has_screen = false;
 static ui_screen_id_t req_screen = UI_SCREEN_HOME;
 static bool req_quit = false;
 static bool req_has_stub = false;
 static page_id_t req_stub_id = PAGE_NONE;
-static bool ui_thread_set = false;
 
-/* ------------------------------------------------------------------ */
-/* Display glue: LVGL flush -> HAL region blit                        */
-/* ------------------------------------------------------------------ */
-
-/* Optional flush instrumentation (build with -DUI_FLUSH_STATS=1): counts
- * the bytes pushed through hal_display_blit*, the flush count, and the
- * largest single area; a summary prints at exit. Off by default — none of
- * this compiles into a normal build. */
-#ifdef UI_FLUSH_STATS
-static uint64_t g_flush_bytes;
-static uint32_t g_flush_count;
-static uint16_t g_flush_max_w, g_flush_max_h;
-
-static void flush_stats_summary(void)
-{
-    printf("[flush] %u flushes, %llu bytes pushed via hal_display_blit*, "
-           "largest area %ux%u px\n",
-           g_flush_count, (unsigned long long)g_flush_bytes,
-           g_flush_max_w, g_flush_max_h);
-}
-#endif
-
-static void display_flush_cb(lv_display_t *disp, const lv_area_t *area, uint8_t *px)
-{
-    /* Present ONLY the dirty area (audit §3.1): the full-frame shadow and the
-     * browser viewport are the backend's business — hal_display_blit_area()
-     * copies the region into the panel shadow before it presents it — so this
-     * callback is a straight region hand-off. A backend with no shadow
-     * (hal_display_framebuffer() == NULL) still displays. */
-    int x = (int)area->x1;
-    int y = (int)area->y1;
-    int w = (int)(area->x2 - area->x1 + 1);
-    int h = (int)(area->y2 - area->y1 + 1);
-
-    /* LVGL never asks for an area outside the display, but a bad panel/driver
-     * pairing must not become a wild write or a silent dropped frame. */
-    if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
-        x + w > PANEL_W || y + h > PANEL_H) {
-        static bool area_warned;
-        if (!area_warned) {
-            area_warned = true;
-            printf("ui_shell: flush area (%d,%d %dx%d) outside the %dx%d panel "
-                   "— skipped\n", x, y, w, h, PANEL_W, PANEL_H);
-        }
-        lv_display_flush_ready(disp);
-        return;
-    }
-
-    /* Rows are handed over packed (w*2 bytes). LVGL's own buffer is packed
-     * while LV_DRAW_BUF_STRIDE_ALIGN is 1 (the host lv_conf), but a device
-     * lv_conf that pads rows for cache alignment would break that silently,
-     * so read the real stride and fall back to row-by-row presentation. */
-    lv_draw_buf_t *buf = lv_display_get_buf_active(disp);
-    size_t stride = (buf && buf->header.stride) ? buf->header.stride
-                                                : (size_t)w * 2;
-    int rc;
-    if (stride == (size_t)w * 2) {
-        rc = hal_display_blit_area(px, (uint16_t)x, (uint16_t)y,
-                                   (uint16_t)w, (uint16_t)h);
-    } else {
-        rc = 0;
-        for (int ry = 0; ry < h; ry++) {
-            rc |= hal_display_blit_area(px + (size_t)ry * stride,
-                                        (uint16_t)x, (uint16_t)(y + ry),
-                                        (uint16_t)w, 1);
-        }
-    }
-    if (rc != 0) {
-        static bool blit_warned;
-        if (!blit_warned) {
-            blit_warned = true;
-            printf("ui_shell: hal_display_blit_area rejected a %dx%d area at "
-                   "(%d,%d)\n", w, h, x, y);
-        }
-    }
-#ifdef UI_FLUSH_STATS
-    {
-        uint32_t area_px = (uint32_t)w * (uint32_t)h;
-        g_flush_bytes += (uint64_t)w * h * 2;
-        g_flush_count++;
-        if (area_px > (uint32_t)g_flush_max_w * g_flush_max_h) {
-            g_flush_max_w = (uint16_t)w;
-            g_flush_max_h = (uint16_t)h;
-        }
-    }
-#endif
-    lv_display_flush_ready(disp);
-}
+/* The display, its draw buffer, the tick source and the flush -> HAL region
+ * blit are the port's (ui_port.h). Nothing in this file creates a display or
+ * names a clock: that is what makes the UI buildable for the chip. */
 
 /* ------------------------------------------------------------------ */
 /* Style helpers                                                       */
@@ -273,9 +180,8 @@ static void clock_tick_cb(lv_timer_t *timer)
     if (clock_frozen) {
         return;   /* harness run: the seeded time stands still */
     }
-    time_t now = time(NULL);
     struct tm tm_now;
-    localtime_r(&now, &tm_now);
+    ui_port_now(&tm_now);      /* the port owns the wall clock (ui_port.h) */
     char buf[8];
     strftime(buf, sizeof buf, "%H:%M", &tm_now);
     lv_label_set_text(lbl_clock, buf);
@@ -1192,36 +1098,14 @@ static void on_key(hal_key_t key)
 /* Public API                                                          */
 /* ------------------------------------------------------------------ */
 
-/* LVGL tick source: monotonic clock. The S3 port points this at
- * esp_timer_get_time() / 1000 instead. */
-static uint32_t tick_get_cb(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)(ts.tv_sec * 1000u + ts.tv_nsec / 1000000u);
-}
-
-/* Load a TTF from the font dir (absolute path first, then a CWD-relative
- * assets/fonts path for a build tree run from another directory). NULL when
- * unavailable. Called from ui_shell_init(), i.e. on the UI thread, so the
- * fonts are created in this LVGL instance before any screen renders. */
-static lv_font_t *load_ttf(const char *name, int px)
-{
-    char path[512];
-    snprintf(path, sizeof path, "A:" FONT_DIR "/%s", name);
-    lv_font_t *f = lv_tiny_ttf_create_file(path, px);
-    if (!f) {
-        snprintf(path, sizeof path, "A:assets/fonts/%s", name);
-        f = lv_tiny_ttf_create_file(path, px);
-    }
-    return f;
-}
+/* The tick source and the face source are the port's (ui_port.h): a monotonic
+ * clock and a filesystem path are simulator things, not UI things. */
 
 /* Primary face loader: a missing TTF falls back to the built-in Montserrat
  * face so the simulator still starts on a tree without the assets. */
 static lv_font_t *load_font(const char *name, int px, const lv_font_t *fallback)
 {
-    lv_font_t *f = load_ttf(name, px);
+    lv_font_t *f = ui_port_font(name, px);
     if (!f) {
         printf("ui_shell: font %s (%d px) missing, using built-in fallback\n",
                name, px);
@@ -1255,8 +1139,8 @@ static lv_font_t *fallback_face(int px, bool emoji)
     }
     int i = g_fb_n++;
     g_fb[i].px = px;
-    g_fb[i].hebrew = load_ttf(UI_FONT_HEBREW_FILE, px);
-    g_fb[i].emoji  = load_ttf(UI_FONT_EMOJI_FILE, px);
+    g_fb[i].hebrew = ui_port_font(UI_FONT_HEBREW_FILE, px);
+    g_fb[i].emoji  = ui_port_font(UI_FONT_EMOJI_FILE, px);
     if (!g_fb[i].hebrew && !g_fb[i].emoji) {
         printf("ui_shell: no fallback faces at %d px\n", px);
     }
@@ -1428,15 +1312,11 @@ lv_font_t *ui_font_icon_s(void)   { return f_icon_s; }
 
 int ui_shell_init(void)
 {
-    ui_thread_id = pthread_self();
-    ui_thread_set = true;
-
-#ifdef UI_FLUSH_STATS
-    atexit(flush_stats_summary);   /* the UI thread is joined before exit */
-#endif
-
-    lv_init();
-    lv_tick_set_cb(tick_get_cb);
+    /* The port owns lv_init, the tick source, the display and its draw buffer
+     * (ui_port.h); this file owns the frame. */
+    if (ui_port_init() != 0) {
+        return -1;
+    }
 
     hal_display_info_t info;
     hal_display_info(&info);
@@ -1444,19 +1324,6 @@ int ui_shell_init(void)
         printf("ui_shell: panel %ux%u, expected %dx%d\n", info.width, info.height,
                PANEL_W, PANEL_H);
     }
-
-    draw_buf = malloc((size_t)PANEL_W * PANEL_H * 2);
-    if (!draw_buf) {
-        printf("ui_shell: draw buffer allocation failed\n");
-        return -1;
-    }
-
-    lv_display_t *disp = lv_display_create(PANEL_W, PANEL_H);
-    lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
-    lv_display_set_buffers(disp, draw_buf, NULL,
-                           (size_t)PANEL_W * PANEL_H * 2,
-                           LV_DISPLAY_RENDER_MODE_PARTIAL);
-    lv_display_set_flush_cb(disp, display_flush_cb);
 
     ui_input_attach_indev();
     /* ui_input.c owns the event queue and the gesture state; this file owns
@@ -1662,38 +1529,39 @@ bool ui_shell_clock_frozen(void)
 
 void ui_shell_request_screen(ui_screen_id_t id)
 {
-    pthread_mutex_lock(&req_lock);
+    ui_port_lock();
     req_screen = id;
     req_has_screen = true;
-    pthread_mutex_unlock(&req_lock);
+    ui_port_unlock();
 }
 
 void ui_shell_request_quit(void)
 {
-    pthread_mutex_lock(&req_lock);
+    ui_port_lock();
     req_quit = true;
-    pthread_mutex_unlock(&req_lock);
+    ui_port_unlock();
 }
 
 void ui_shell_request_stub(page_id_t id)
 {
-    pthread_mutex_lock(&req_lock);
+    ui_port_lock();
     req_has_stub = true;
     req_stub_id = id;
-    pthread_mutex_unlock(&req_lock);
+    ui_port_unlock();
 }
 
 void ui_shell_run_iteration(void)
 {
     /* Architectural guardrail: LVGL is not thread-safe. If anything but the
-     * UI thread reaches this function, say so loudly in development. */
-    if (ui_thread_set && !pthread_equal(pthread_self(), ui_thread_id)) {
+     * UI thread reaches this function, say so loudly in development. The port
+     * knows which thread that is; this file only asks. */
+    if (!ui_port_self_is_ui_thread()) {
         fprintf(stderr, "ui_shell: run_iteration() off the UI thread!\n");
         return;
     }
 
     /* Apply cross-thread requests first. */
-    pthread_mutex_lock(&req_lock);
+    ui_port_lock();
     bool have_screen = req_has_screen;
     ui_screen_id_t want = req_screen;
     bool want_quit = req_quit;
@@ -1701,7 +1569,7 @@ void ui_shell_run_iteration(void)
     page_id_t stub_id = req_stub_id;
     req_has_screen = false;
     req_has_stub = false;
-    pthread_mutex_unlock(&req_lock);
+    ui_port_unlock();
 
     if (want_quit) {
         quit_requested = true;

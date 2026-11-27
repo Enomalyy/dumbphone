@@ -1,0 +1,14 @@
+# THE source list. One line per library boundary.
+#
+# Every .c inside a boundary directory belongs to that library. No build carries
+# its own copy of the file list: the desktop build reads this file through
+# sources.cmake, web/build.sh reads it directly, and the IDF components glob the
+# same directories. Adding a file to ui/ means touching nothing; adding a
+# boundary means adding one line here.
+#
+# hal/ carries no sources on the desktop side (it is the contract; the simulator's
+# backends are in host/src/) — its device backends live in hal/esp32s3/ and are
+# part of the same boundary, compiled only by the IDF build.
+ui
+model
+hal
