@@ -34,6 +34,10 @@ const keymap_t *ui_mainmenu_keymap(void);
  * list and refresh (the same mechanism a swipe uses). */
 void ui_mainmenu_cycle_cat(int dir);
 
+/* Select category `cat` directly: the tray-cell tap target (spec §14.1).
+ * Lands in the same setter the d-pad cycle drives — one behaviour. */
+void ui_mainmenu_select_cat(int cat);
+
 /* The settings row (a setting_id_t) the selected item stands for, or -1
  * when the menu is not on its SETTINGS category. */
 int ui_mainmenu_selected_setting(void);

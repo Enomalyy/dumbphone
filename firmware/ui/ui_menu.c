@@ -83,6 +83,7 @@ struct ui_list_page {
     lv_obj_t *chev_l, *chev_r;           /* << >> cycling chevrons     */
     lv_obj_t *rows_box;                  /* scrollable row area        */
     ui_list_gesture_cb gesture_cb;       /* horizontal-swipe handler   */
+    ui_list_cat_cb     cat_cb;           /* tray-cell tap -> setter    */
     ui_list_activate_cb activate_cb;     /* tap-activate handler       */
     lv_obj_t *rows[MENU_MAX_ITEMS];
     lv_obj_t *row_caret[MENU_MAX_ITEMS];
@@ -230,6 +231,21 @@ static int label_width(const menu_item_t *it, int row_w)
 /* Styling — appearance resolved through the theme                     */
 /* ------------------------------------------------------------------ */
 
+/* Tray-cell tap (spec §14.1): a pressed icon selects its category through
+ * the page's own setter — the same function the d-pad cycle drives. Select
+ * on RELEASE only (like on_row_tap): CREATED and other non-indev events
+ * must not reach it, and a drag that started on the cell is not a tap. */
+static void on_cell_tap(lv_event_t *e)
+{
+    list_page_t *p = lv_event_get_user_data(e);
+    int idx = -1;
+    for (int i = 0; i < p->m->n_cats; i++) {
+        if (p->cells[i] == lv_event_get_target(e)) { idx = i; break; }
+    }
+    if (idx < 0 || lv_indev_get_press_moved(lv_event_get_indev(e))) return;
+    if (p->cat_cb) p->cat_cb(p, idx);
+}
+
 static void style_cell(list_page_t *p, int idx)
 {
     menu_t *m = p->m;
@@ -345,6 +361,16 @@ static void ensure_visible(list_page_t *p)
     lv_obj_scroll_to_view(p->rows[m->sel], LV_ANIM_OFF);
 }
 
+/* §14.6 — the one shared centring rule for every menu type: a content
+ * block of height bh inside a cell of height ch sits at (ch - bh) / 2,
+ * so label and icon are optically centred in their cell. The full-width
+ * layout already embodies it (its label box spans the row height and
+ * LVGL centres the text in it); the grid cells apply it directly below. */
+static int cell_center_top(int ch, int bh)
+{
+    return (ch - bh) / 2;
+}
+
 static void rebuild_rows(list_page_t *p)
 {
     menu_t *m = p->m;
@@ -391,20 +417,35 @@ static void rebuild_rows(list_page_t *p)
         lv_obj_add_event_cb(row, on_row_tap, LV_EVENT_RELEASED, p);
 
         if (m->layout == LAYOUT_GRID) {
-            /* Cell: icon centered top, label centered below (wraps to two
-             * lines). No number/caret — the highlight box IS the selection. */
-            lv_obj_t *ic = mk_label(row, it->icon, ui_font_icon(), C_TEXT,
-                                    0, 6, w);
+            /* Cell: icon + label as ONE block, optically centred in the
+             * cell (spec §14.6, shared rule cell_center_top). The label
+             * wraps to two lines when it does not fit one; the block is
+             * measured from the real face line heights, so a one-line and
+             * a two-line label both sit centred. No number/caret — the
+             * highlight box IS the selection. */
+            lv_font_t *ic_f = ui_font_icon();
+            lv_font_t *lb_f = ui_font_body_m();
+            int icon_h = (int)lv_font_get_line_height(ic_f);
+            int line_h = (int)lv_font_get_line_height(lb_f);
+            int lines = text_px(it->label, lb_f) > w - 8 ? 2 : 1;
+            int block_h = icon_h + UI_CELL_ICON_GAP + lines * line_h;
+            int top = cell_center_top(h, block_h);
+            if (top < 0) {
+                top = 0;   /* over-long label: pin to the top, clip */
+            }
+
+            lv_obj_t *ic = mk_label(row, it->icon, ic_f, C_TEXT, 0, top, w);
+            lv_obj_set_height(ic, icon_h);
             lv_obj_set_style_text_align(ic, LV_TEXT_ALIGN_CENTER, 0);
             p->row_icon[i] = ic;
 
             lv_obj_t *lb = lv_label_create(row);
-            lv_obj_set_style_text_font(lb, ui_font_body_m(), 0);
+            lv_obj_set_style_text_font(lb, lb_f, 0);
             lv_obj_set_style_text_color(lb, C_TEXT, 0);
             lv_obj_remove_flag(lb, LV_OBJ_FLAG_CLICKABLE);
             lv_label_set_long_mode(lb, LV_LABEL_LONG_MODE_WRAP);
-            lv_obj_set_pos(lb, 4, 36);
-            lv_obj_set_size(lb, w - 8, h - 36);
+            lv_obj_set_pos(lb, 4, top + icon_h + UI_CELL_ICON_GAP);
+            lv_obj_set_size(lb, w - 8, lines * line_h);
             lv_obj_set_style_text_align(lb, LV_TEXT_ALIGN_CENTER, 0);
             ui_text_set(lb, it->label);
             p->row_lbl[i] = lb;
@@ -529,6 +570,7 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
             lv_obj_set_size(box, UI_TRAY_CELL_W, UI_TRAY_CELL_H);
             lv_obj_set_pos(box, cx - UI_TRAY_CELL_W / 2, TRAY_Y);
             lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_add_event_cb(box, on_cell_tap, LV_EVENT_RELEASED, p);
             lv_obj_set_style_bg_color(box, C_GROUND, 0);
             lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(box, 2, 0);
@@ -726,6 +768,13 @@ void ui_list_set_gesture_cb(list_page_t *p, ui_list_gesture_cb cb)
 {
     if (p) {
         p->gesture_cb = cb;
+    }
+}
+
+void ui_list_set_cat_cb(list_page_t *p, ui_list_cat_cb cb)
+{
+    if (p) {
+        p->cat_cb = cb;
     }
 }
 

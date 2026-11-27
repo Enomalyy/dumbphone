@@ -26,11 +26,16 @@ home                    panel --screen home
 chat                    panel --screen chat
 family                  panel --screen chat --cycle right 1
 unread                  panel --screen chat --cycle right 2
+chat-tap-cat            panel --screen chat --tap 160 41
 favorites               panel --screen chat --cycle right 3
 archived                panel --screen chat --cycle right 4
 menu                    panel --screen menu
 menu-calls              panel --screen menu --cycle right 1
 menu-settings           panel --screen menu --cycle right 3
+# Tappable category strip (spec §14.1): a tray-icon tap selects that
+# category through the same path as d-pad L/R, so these frames must match the
+# key-driven equivalents pixel-for-pixel.
+menu-tap-cat            panel --screen menu --tap 120 41
 menu-grid               panel --screen menu --menu-style grid
 menu-grid-maps          panel --screen menu --menu-style grid --cycle right 2
 settings                panel --screen settings

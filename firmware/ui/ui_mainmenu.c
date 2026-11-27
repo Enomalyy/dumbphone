@@ -141,6 +141,22 @@ static void menu_gesture(list_page_t *p, int dir)
     menu_cycle_cat(dir);
 }
 
+/* Select category `cat` directly — the tray-cell tap target (spec §14.1).
+ * This and menu_cycle_cat() both land in menu_set_cat(): tap and d-pad L/R
+ * share one behaviour, there is no second selection path. */
+void ui_mainmenu_select_cat(int cat)
+{
+    menu_set_cat(cat);
+}
+
+/* The strip's tap callback: the renderer reports the tapped cell's index,
+ * we hand it to the same setter the d-pad cycle uses. */
+static void menu_cat_tap(list_page_t *p, int idx)
+{
+    (void)p;
+    ui_mainmenu_select_cat(idx);
+}
+
 list_page_t *ui_mainmenu_build(lv_obj_t *parent)
 {
     /* The main menu renders in whatever layout the settings say (spec §2:
@@ -149,6 +165,7 @@ list_page_t *ui_mainmenu_build(lv_obj_t *parent)
                                                                   : LAYOUT_LIST;
     g_menu   = ui_list_build(parent, &g_menu_m);
     ui_list_set_gesture_cb(g_menu, menu_gesture);   /* swipes cycle cats */
+    ui_list_set_cat_cb(g_menu, menu_cat_tap);       /* tappable strip (§14.1) */
     return g_menu;
 }
 

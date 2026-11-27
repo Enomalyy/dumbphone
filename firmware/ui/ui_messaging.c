@@ -218,11 +218,20 @@ static void chat_gesture(list_page_t *p, int dir)
     chat_cycle_cat(dir);
 }
 
+/* The strip's tap callback (spec §14.1): the tapped cell's index goes to the
+ * same setter the d-pad cycle drives — one behaviour, no second path. */
+static void chat_cat_tap(list_page_t *p, int idx)
+{
+    (void)p;
+    chat_set_cat(idx);
+}
+
 list_page_t *ui_messaging_build(lv_obj_t *parent)
 {
     build_chat_items();   /* resolve the chat source into category slices */
     g_chat = ui_list_build(parent, &g_chat_m);
     ui_list_set_gesture_cb(g_chat, chat_gesture);   /* swipes cycle cats */
+    ui_list_set_cat_cb(g_chat, chat_cat_tap);       /* tappable strip (§14.1) */
     return g_chat;
 }
 

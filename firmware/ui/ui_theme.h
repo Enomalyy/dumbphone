@@ -99,6 +99,8 @@ extern "C" {
 #define UI_GRID_COLS        3
 #define UI_GRID_CELL_W ((ui_geom_w()) / UI_GRID_COLS)
 #define UI_GRID_ROW_H      84   /* icon + up-to-two-line label         */
+#define UI_CELL_ICON_GAP   8    /* §14.6: gap between a cell's icon and
+                                  its label (both centred as one block) */
 
 /* Options sidebar overlay (ui_sidebar.c). */
 #define UI_SIDEBAR_W      ui_sidebar_w()     /* runtime               */

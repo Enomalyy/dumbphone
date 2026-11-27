@@ -125,6 +125,12 @@ typedef struct ui_list_page list_page_t;
  * Vertical swipes scroll natively and never reach it. */
 typedef void (*ui_list_gesture_cb)(list_page_t *p, int dir);
 
+/* Category-strip tap (spec §14.1): called with the tapped tray cell's index
+ * when a category icon is pressed. The page wires this to the SAME setter
+ * its d-pad cycle drives, so tap and keys share one behaviour — there is no
+ * second selection path. */
+typedef void (*ui_list_cat_cb)(list_page_t *p, int idx);
+
 /* Tap-activate handler for a page (set per page). A tap on a row is the
  * touch equivalent of CENTER (spec §1): the renderer selects the row, then
  * calls this with the page and the tapped index. The shell registers it and
@@ -182,6 +188,9 @@ lv_obj_t *ui_list_root(const list_page_t *p);
 /* Set the page's horizontal-swipe handler (NULL = no swipe handling). The
  * shell wires it for pages with a category strip. */
 void ui_list_set_gesture_cb(list_page_t *p, ui_list_gesture_cb cb);
+
+/* Set a page's tray-cell tap callback (spec §14.1). */
+void ui_list_set_cat_cb(list_page_t *p, ui_list_cat_cb cb);
 
 /* The page's horizontal-swipe handler (NULL if none). */
 ui_list_gesture_cb ui_list_page_gesture_cb(const list_page_t *p);
