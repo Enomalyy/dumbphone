@@ -81,6 +81,7 @@ struct ui_list_page {
     lv_obj_t *chev_l, *chev_r;           /* << >> cycling chevrons     */
     lv_obj_t *rows_box;                  /* scrollable row area        */
     ui_list_gesture_cb gesture_cb;       /* horizontal-swipe handler   */
+    ui_list_activate_cb activate_cb;     /* tap-activate handler       */
     lv_obj_t *rows[MENU_MAX_ITEMS];
     lv_obj_t *row_caret[MENU_MAX_ITEMS];
     lv_obj_t *row_num[MENU_MAX_ITEMS];
@@ -298,14 +299,21 @@ static void style_row(list_page_t *p, int idx)
 /* Row rebuild — recreates the item rows from the current `items`      */
 /* ------------------------------------------------------------------ */
 
-/* Tap a row to select it: touch is the universal fallback for every key
- * action (spec §1). The page pointer rides in user_data; the index is found
- * by matching the target object against the row table (no allocation). */
-/* Select a row on RELEASE, not PRESS: a drag that starts on a row and then
+/* Tap a row: touch is the universal fallback for every key action
+ * (spec §1). The page pointer rides in user_data; the index is found by
+ * matching the target object against the row table (no allocation).
+ *
+ * Select on RELEASE, not PRESS: a drag that starts on a row and then
  * scrolls (spec §1) must not select it — during a scroll the rows move with
  * the finger, so at release the finger is often over the same row again and
  * RELEASED fires on it. press_moved distinguishes the two: it is set once
- * any indev read moves more than the 10 px scroll limit. */
+ * any indev read moves more than the 10 px scroll limit.
+ *
+ * A tap is a highlight AND a press (issue #13): select, then hand the page
+ * to its activate callback — the shell's, which runs the same activation
+ * CENTER would. The renderer does not know what activation means; and the
+ * callback may rebuild or replace this page, so p and its rows are not
+ * touched after it returns. */
 static void on_row_tap(lv_event_t *e)
 {
     if (lv_indev_get_press_moved(lv_event_get_indev(e))) {
@@ -316,6 +324,9 @@ static void on_row_tap(lv_event_t *e)
     for (int i = 0; i < MENU_MAX_ITEMS; i++) {
         if (p->rows[i] == t) {
             ui_list_select(p, i);
+            if (p->activate_cb) {
+                p->activate_cb(p, i);
+            }
             return;
         }
     }
@@ -719,4 +730,20 @@ void ui_list_set_gesture_cb(list_page_t *p, ui_list_gesture_cb cb)
 ui_list_gesture_cb ui_list_page_gesture_cb(const list_page_t *p)
 {
     return p ? p->gesture_cb : NULL;
+}
+
+void ui_list_set_activate_cb(list_page_t *p, ui_list_activate_cb cb)
+{
+    if (p) {
+        p->activate_cb = cb;
+    }
+}
+
+const char *ui_list_selected_label(const list_page_t *p)
+{
+    menu_t *m = p ? p->m : NULL;
+    if (!m || m->n_items == 0 || m->sel >= m->n_items) {
+        return NULL;
+    }
+    return m->items[m->sel].label;
 }

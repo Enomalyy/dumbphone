@@ -53,6 +53,7 @@ swipe-scroll            panel --screen chat --swipe up 120
 swipe-chat              panel --screen chat --swipe left 120
 swipe-menu              panel --screen menu --swipe left 120
 tap-row3                panel --screen chat --tap 160 217
+tap-menu-settings       panel --screen menu --cycle right 3 --tap 160 107
 key-down                panel --screen chat --key down
 options-home            panel --screen home --key shoulder-l
 options-menu            panel --screen menu --key shoulder-l

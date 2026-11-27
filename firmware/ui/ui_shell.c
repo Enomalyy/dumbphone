@@ -409,11 +409,34 @@ static void open_dial(int idx);
 static void open_page(page_id_t id);
 static void relayout_all(void);
 
+static void activate(void);
+
+/* Touch on a row = select + activate (spec §1: touch is the universal
+ * fallback for every key action; issue #13). The renderer does not know what
+ * activation means — it hands back the page and the tapped index, and the
+ * shell runs the SAME page-dependent activation CENTER would. The tap has
+ * already selected the row (on_row_tap -> ui_list_select), so activate()
+ * (which reads each page's sel) acts on exactly the tapped row. */
+static void list_activate_cb(list_page_t *p, int idx)
+{
+    (void)idx;
+    if (ui_sidebar_is_open()) {
+        return;   /* the sidebar owns the pad while open: its rows have
+                     their own tap path, page rows select only */
+    }
+    if (!lv_obj_is_visible(ui_list_root(p))) {
+        return;   /* a hidden page's rows cannot be tapped */
+    }
+    activate();
+}
+
 /* CENTER: page-dependent meaning. HOME -> MAIN MENU; MENU -> open item;
  * SETTINGS -> toggle the selected setting and redraw its value, or open the
  * sub-page a row targets (Speed Dials / Held Presses); SPEEDDIALS -> cycle
  * the selected slot; HELDPRESS -> cycle the selected key's preset.
- */
+ * Called by CENTER, by the sidebar's execute, and by a row tap
+ * (list_activate_cb) — it reads each page's own selection, so all three
+ * callers act on the same row. */
 static void activate(void)
 {
     if (screen_stack[stack_top] == UI_SCREEN_HOME) {
@@ -458,6 +481,15 @@ static void activate(void)
     } else if (screen_stack[stack_top] == UI_SCREEN_HELDPRESS) {
         ui_heldpress_cycle(ui_list_sel(g_heldpress));
         ui_list_refresh(g_heldpress);
+    } else if (screen_stack[stack_top] == UI_SCREEN_CHATLIST) {
+        /* The conversation page is a later leg: for now a stub titled with
+         * the chat name — the same wiring bar as a speed dial's call screen
+         * (the keymap already promised CENTER opens the selected chat). */
+        const char *name = ui_list_selected_label(ui_messaging_page());
+        if (name) {
+            ui_leaf_set_stub_title(name);
+            push_screen(UI_SCREEN_STUB);
+        }
     }
 }
 
@@ -1310,6 +1342,18 @@ int ui_shell_init(void)
         printf("ui_shell: page pool exhausted — raise LIST_POOL in ui_menu.c\n");
         return -1;
     }
+
+    /* Touch on a row = select + activate (spec §1, issue #13): one shared
+     * callback for every list page; the shell decides what activation means. */
+    ui_list_set_activate_cb(ui_messaging_page(), list_activate_cb);
+    ui_list_set_activate_cb(g_menu, list_activate_cb);
+    ui_list_set_activate_cb(g_settings, list_activate_cb);
+    ui_list_set_activate_cb(g_display, list_activate_cb);
+    ui_list_set_activate_cb(g_font, list_activate_cb);
+    ui_list_set_activate_cb(g_speeddial, list_activate_cb);
+    ui_list_set_activate_cb(g_heldpress, list_activate_cb);
+    ui_list_set_activate_cb(g_callhist, list_activate_cb);
+    ui_list_set_activate_cb(g_contacts, list_activate_cb);
 
     /* The sidebar is created last so it draws above the content screens. */
     ui_sidebar_build(scr_root);

@@ -125,6 +125,14 @@ typedef struct ui_list_page list_page_t;
  * Vertical swipes scroll natively and never reach it. */
 typedef void (*ui_list_gesture_cb)(list_page_t *p, int dir);
 
+/* Tap-activate handler for a page (set per page). A tap on a row is the
+ * touch equivalent of CENTER (spec §1): the renderer selects the row, then
+ * calls this with the page and the tapped index. The shell registers it and
+ * decides what activation means per page — the renderer stays dumb. It may
+ * rebuild or replace the page, so the caller must not touch the page after
+ * it returns (issue #13). */
+typedef void (*ui_list_activate_cb)(list_page_t *p, int idx);
+
 /* Paint one list-style row's base look — banded fill, green selection with
  * its bright edge, flat corners — the ONE shared "paint a row" helper: the
  * renderer uses it for every list row, and any overlay that draws list-
@@ -161,6 +169,9 @@ void ui_menu_relayout(void);
 
 page_id_t ui_list_selected_target(const list_page_t *p);
 
+/* The selected row's label (NULL if the page has no rows). */
+const char *ui_list_selected_label(const list_page_t *p);
+
 /* Accessors. */
 uint8_t ui_list_sel(const list_page_t *p);
 uint8_t ui_list_cat(const list_page_t *p);
@@ -174,6 +185,10 @@ void ui_list_set_gesture_cb(list_page_t *p, ui_list_gesture_cb cb);
 
 /* The page's horizontal-swipe handler (NULL if none). */
 ui_list_gesture_cb ui_list_page_gesture_cb(const list_page_t *p);
+
+/* Set the page's tap-activate handler (NULL = a tap only selects). The
+ * shell wires it for every list page so a tap ends where CENTER does. */
+void ui_list_set_activate_cb(list_page_t *p, ui_list_activate_cb cb);
 
 #ifdef __cplusplus
 }
