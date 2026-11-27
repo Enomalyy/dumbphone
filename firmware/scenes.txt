@@ -56,6 +56,7 @@ tap-row3                panel --screen chat --tap 160 217
 key-down                panel --screen chat --key down
 options-home            panel --screen home --key shoulder-l
 options-menu            panel --screen menu --key shoulder-l
+options-menu-moved      panel --screen menu --key shoulder-l --key down
 options-callhist        panel --screen callhist --key shoulder-l
 settings-display        panel --screen settings --key ok
 settings-font           panel --screen settings --key ok --key down --key ok

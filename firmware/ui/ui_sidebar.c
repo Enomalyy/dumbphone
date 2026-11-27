@@ -226,8 +226,13 @@ void ui_sidebar_move(int step)
     if (s == g_side_sel) {
         return;
     }
-    style_side_row(g_side_sel);
+    /* Update sel FIRST: style_side_row decides "selected" from
+     * g_side_sel, so the old row must be styled after the pointer moves,
+     * or it stays green and both rows end up highlighted (the same rule
+     * ui_list_move_sel() in ui_menu.c follows — issue #10). */
+    int old_sel = g_side_sel;
     g_side_sel = s;
+    style_side_row(old_sel);
     style_side_row(g_side_sel);
 }
 
