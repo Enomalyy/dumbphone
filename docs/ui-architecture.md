@@ -343,7 +343,7 @@ work, R1–R5).
 **Status (27/11):** §14.9–§14.12 are built — one nine-role palette with DARK and LIGHT, a real
 apply pass, Settings → Display (Theme / Font / Menu Style / Softkey bar), and the font mechanism
 with three roles. `just check-colours` fails the build on any colour literal outside the palette
-tables. §14.1–§14.3 (Stage B) and §14.4 (Stage C) are built; §14.5–§14.8 remain. The typeface
+tables. §14.1–§14.4 and §14.8 (Stages B + C) are built; §14.5–§14.7 remain. The typeface
 question is still open: the faces are selectable, and none has been declared the winner.
 
 Eliyahu's list, to be executed as ONE wave (relay legs), then audited as before. Ordering matters:
@@ -421,6 +421,16 @@ Holding d-pad DOWN (or UP) continues to move the selection; after a short dwell 
 accelerates (e.g. repeat interval halving to a floor), so a long list can be traversed without
 tapping repeatedly. Release stops immediately. Must not fight the long-press action already bound
 to keys (§ held-press config) — decide and document which wins, and why.
+
+**Status (27/11): BUILT.** UP/DOWN only: the first step fires on the press itself (spec §14.0),
+repeats start after a 400 ms dwell (`UI_KEY_REPEAT_DWELL_MS`) at a 200 ms interval
+(`UI_KEY_REPEAT_START_MS`) that halves per repeat down to a 40 ms floor
+(`UI_KEY_REPEAT_MIN_MS`); release stops motion instantly. The engine lives in `ui_input.c`
+(one poll-loop state machine, pure interval ladder unit-tested in `test_host.c`); the shell's
+dispatch is the step action, so the sidebar's UP/DOWN accelerates through the same path.
+A configured held-press binding wins over implicit repeat — if UP/DOWN has a target in
+Settings ↦ Held Presses, holding it performs only the custom action (decisions §16.2). Golden
+scene: `key-repeat` (DOWN held 1200 ms on the chat list, landing clamped on the last row).
 
 **Acceptance for the wave (the relay charter inherits this):**
 - All of §14.1–§14.8 demonstrably working in the simulator, each verified by screenshot per state.

@@ -122,3 +122,49 @@ it: after §14 there will be far more layout code to unpick.
 ---
 
 ## 16. Stage C — touch feel (27/11): the scroll contract and key-repeat rules
+
+**16.1 The §14.4 scroll contract (BUILT).**
+- Every scrollable surface is an LVGL scroll target: the chat list, every long list page,
+  the main menu (carousel and grid), and — new in this stage — the options sidebar's row
+  area (`ui_sidebar.c`). They all sit under ONE shared drag dead zone,
+  `UI_SCROLL_DEADZONE_PX` (10 px), set on the indev itself in `ui_input.c`. The dead zone is
+  a property of the input device, not of any widget, so no page can have a different feel.
+- A vertical drag scrolls 1:1 with the finger. That exact tracking is the "motion" §14.0
+  asks for — there is no separate scroll animation, so nothing can block or delay input.
+  LVGL's native fling may run after a fast flick; it never runs while the finger is down,
+  and the harness's slow drags decay to zero velocity before release, so frames stay
+  reproducible.
+- A drag never selects or executes the row it started on: the `press_moved` rule
+  (`ui_menu.c`'s `on_row_tap`, `ui_sidebar.c`'s `on_side_row_tap`). The tap guard from
+  `f20dd67b` is untouched.
+- A horizontal drag cycles categories only where a page has them (the shell's
+  `page_swipe` hands to the page's gesture callback); on pages without categories it does
+  nothing rather than half-scrolling.
+- Scroll position rule (the "pick one and document it" item from §13.1): **per-page,
+  survives going back and returning; resets to the top when a category changes**
+  (`ui_list_set_category` — a new list is a new view). No persistence across app restarts;
+  that comes with the model layer (spec §16.4) if it ever matters.
+- The sidebar's row area is a scroll target even though no page's option table is long
+  enough to overflow today: the contract must hold for any table size, and making it one
+  costs nothing (same flat styling as the list pages' rows box).
+
+**16.2 The §14.8 key-repeat rules (BUILT).**
+- UP/DOWN are the only keys that repeat. LEFT/RIGHT stay single-step: they cycle a handful
+  of categories, and repeating them would race the user's intent.
+- The first step fires on the PRESS, not the release (spec §14.0: the selection moves on
+  the input event). Repeats then start after a 400 ms dwell (`UI_KEY_REPEAT_DWELL_MS`),
+  at a 200 ms interval (`UI_KEY_REPEAT_START_MS`) that halves per repeat down to a 40 ms
+  floor (`UI_KEY_REPEAT_MIN_MS`). Release stops the repeats instantly — the state machine
+  lives in `ui_input.c`'s poll loop and is cleared on KEY_UP.
+- Long-press conflict (the "decide which wins" item): **a configured held-press binding
+  wins.** If UP/DOWN has a target in Settings ↦ Held Presses, holding it performs only the
+  custom action (on release, as today) and never moves the selection; a short press of a
+  configured key still moves the selection. Reason: an explicit user setting must not be
+  silently overridden by implicit behaviour — the held-press page exists precisely so Eli
+  can assign these keys, and the shell asks `ui_heldpress_target()` before arming repeat.
+  (SHOULDER-L is seeded with a preset target — New Chat — which is why this rule had to be
+  decided at all.)
+- The sidebar's UP/DOWN accelerates too: it routes through the same press-time dispatch as
+  every other page, so one engine covers both.
+
+---

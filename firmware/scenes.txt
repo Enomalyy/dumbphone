@@ -66,6 +66,10 @@ swipe-scroll            panel --screen chat --swipe up 120
 # first screen with the same recipe (same dead zone, same 1:1 feel).
 callhist-scroll         panel --screen callhist --swipe up 120
 contacts-scroll         panel --screen contacts --swipe up 120
+# §14.8: held-down acceleration — DOWN held 1200 ms on the chat list; repeats
+# start after the dwell and accelerate to the floor, landing clamped on the
+# last row (jitter-safe: extra repeats only stay clamped).
+key-repeat              panel --screen chat --key down --hold 1200
 swipe-chat              panel --screen chat --swipe left 120
 swipe-menu              panel --screen menu --swipe left 120
 tap-row3                panel --screen chat --tap 160 217

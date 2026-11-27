@@ -1029,6 +1029,29 @@ void ui_shell_show_screen(ui_screen_id_t id)
 /* KEY_UP intent, in order: the lock gate first (spec §1: while LOCKED only
  * the keypad unlocks — every other key and every long press is inert), then
  * a configured long press, then the ordinary short press. */
+/* §14.8: may this key start repeating right now? UP/DOWN only, never while
+ * locked (the lock gate owns that state), and never for a key with a
+ * configured held-press target — an explicit user binding wins over implicit
+ * repeat (decisions §16.2). */
+static bool can_repeat_key(hal_key_t key)
+{
+    if (key != HAL_KEY_UP && key != HAL_KEY_DOWN) {
+        return false;
+    }
+    if (is_locked()) {
+        return false;
+    }
+    return ui_heldpress_target(key) == PAGE_NONE;
+}
+
+/* §14.8: the repeat step — exactly what a short press of the key would do:
+ * the shell's normal dispatch (the sidebar while it is open, this page's
+ * keymap otherwise). */
+static void on_key_step(hal_key_t key)
+{
+    on_key(key);
+}
+
 static void on_key_released(hal_key_t key, uint32_t held_ms)
 {
     if (is_locked()) {
@@ -1036,6 +1059,9 @@ static void on_key_released(hal_key_t key, uint32_t held_ms)
             unlock_home();
         }
         return;
+    }
+    if (ui_input_fired_on_down(key)) {
+        return;   /* §14.8: its step already ran on the press */
     }
     page_id_t hp = ui_heldpress_target(key);
     if (held_ms >= UI_LONG_PRESS_MS && hp != PAGE_NONE) {
@@ -1361,6 +1387,8 @@ int ui_shell_init(void)
     /* ui_input.c owns the event queue and the gesture state; this file owns
      * what each intent means (lock gate, long press, page swipe). */
     ui_input_set_cbs(on_key_released, page_swipe);
+    /* §14.8: held-down UP/DOWN accelerates through long lists. */
+    ui_input_set_repeat_cbs(can_repeat_key, on_key_step);
     /* Snappier touch sampling than the 16 ms default: drags register in
      * fewer frames (and the harness's --swipe stays deterministic). */
 

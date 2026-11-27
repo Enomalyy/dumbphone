@@ -15,6 +15,7 @@
 #include <stdio.h>
 
 #include "ui/ui_geometry.h"
+#include "ui/ui_input.h"
 #include "ui/ui_text.h"
 
 static int n_pass = 0;
@@ -140,10 +141,30 @@ static void test_ui_geometry(void)
     CHECK(ui_geom_w() == 120 && ui_geom_h() == 160, "geom clamp: 50x50 -> 120x160");
 }
 
+/* ------------------------------------------------------------------ */
+/* ui_key_repeat_next_interval — the §14.8 halving ladder: 200 -> 100  */
+/* -> 50 -> 40, and the floor holds from there on.                     */
+/* ------------------------------------------------------------------ */
+
+static void test_key_repeat(void)
+{
+    uint32_t iv = UI_KEY_REPEAT_START_MS;
+    CHECK(iv == 200, "repeat: start interval is 200 ms");
+    iv = ui_key_repeat_next_interval(iv);
+    CHECK(iv == 100, "repeat: 200 -> 100");
+    iv = ui_key_repeat_next_interval(iv);
+    CHECK(iv == 50, "repeat: 100 -> 50");
+    iv = ui_key_repeat_next_interval(iv);
+    CHECK(iv == UI_KEY_REPEAT_MIN_MS, "repeat: 50 -> floor 40");
+    iv = ui_key_repeat_next_interval(iv);
+    CHECK(iv == UI_KEY_REPEAT_MIN_MS, "repeat: floor holds at 40");
+}
+
 int main(void)
 {
     test_ui_text();
     test_ui_geometry();
+    test_key_repeat();
 
     printf("test-host: %d passed, %d failed\n", n_pass, n_fail);
     if (n_fail > 0) {
