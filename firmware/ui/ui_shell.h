@@ -20,9 +20,10 @@ extern "C" {
  * spec §2): the base of the stack — END returns here from anywhere and a
  * second END on it locks. CHATLIST is the Messaging surface, reached only
  * through the main menu's MESSAGING category. MENU is the main-menu
- * category carousel, opened from HOME by CENTER. SETTINGS is the settings
- * tree with working toggles. SPEEDDIALS is the speed-dial config sub-page
- * (T9 1..9 names). HELDPRESS is the held-press key config sub-page
+ * category carousel, opened from HOME by CENTER. DISPLAY is the appearance
+ * page of the menu's SETTINGS category (theme/font/menu/bar); SPEEDDIALS is
+ * the speed-dial config sub-page (T9 1..9 names). HELDPRESS is the
+ * held-press key config sub-page
  * (long-press remap, spec §2). CALLHIST / CONTACTS are the Calls
  * category's real pages (spec §2): the recent-calls list and the contacts
  * list. STUB is a generic leaf page for menu items whose real content
@@ -32,8 +33,7 @@ typedef enum {
     UI_SCREEN_HOME = 0,      /* home: wallpaper + widgets (ui_home.c)        */
     UI_SCREEN_CHATLIST,      /* Messaging: WhatsApp-style chat list          */
     UI_SCREEN_MENU,          /* main-menu category carousel (concept gen-09/03) */
-    UI_SCREEN_SETTINGS,      /* settings tree with working toggles              */
-    UI_SCREEN_DISPLAY,       /* Settings > Display: theme/font/menu/bar (spec §14) */
+    UI_SCREEN_DISPLAY,       /* SETTINGS category: theme/font/menu/bar (spec §14) */
     UI_SCREEN_FONT,          /* Settings > Display > Font: headers/text/subtext */
     UI_SCREEN_SPEEDDIALS,    /* speed-dial config sub-page (T9 1..9 names)       */
     UI_SCREEN_HELDPRESS,     /* held-press key config sub-page (spec §2)         */

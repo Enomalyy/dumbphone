@@ -345,6 +345,8 @@ apply pass, Settings → Display (Theme / Font / Menu Style / Softkey bar), and 
 with three roles. `just check-colours` fails the build on any colour literal outside the palette
 tables. §14.1–§14.4 and §14.8 (Stages B + C) are built; §14.5–§14.7 remain. The typeface
 question is still open: the faces are selectable, and none has been declared the winner.
+On 27/11 the settings-tree page was deleted (issue #15): its rows live in the main menu's
+SETTINGS category — see §14.13.
 
 Eliyahu's list, to be executed as ONE wave (relay legs), then audited as before. Ordering matters:
 §14.7 depends on nothing else, but §14.1–§14.6 all land in the renderer/shell, so they must be one
@@ -527,6 +529,12 @@ and an 8bpp baked Pixelify on the small one. **That split is provisional and is 
 record** — it was produced by a session that then wrongly attributed it to Eliyahu. Do not treat it
 as settled, and do not cite it as a rationale. It stays only until this setting exists and Eli tunes
 it by hand.
+
+**14.13 One list, one place.**
+A page may not re-list another page's rows — if two screens show the same list, one of them is a
+bug. Settings live in the main menu's SETTINGS category: its items carry their real targets
+(Display / Speed Dials / Held Presses) and Call Preference toggles in place with its value on the
+row; there is no settings-tree page (issue #15, 27/11).
 
 ## 16. Structural work — folded from the outside review (26/11)
 

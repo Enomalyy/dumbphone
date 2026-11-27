@@ -234,7 +234,6 @@ const char *ui_leaf_stub_title_for(page_id_t id)
     case PAGE_ROUTES:       return "Routes";
     case PAGE_LINES:        return "Lines";
     case PAGE_STATIONS:     return "Stations";
-    case PAGE_SETTINGS:     return "Settings";
     default:                return "Coming Soon";
     }
 }

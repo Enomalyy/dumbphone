@@ -1,6 +1,20 @@
 /*
- * ui_settings.c — the Settings tree and its Display/Font sub-pages, as
+ * ui_settings.c — the settings state and its Display/Font pages, as
  * canonical menu_t pages with working values.
+ *
+ * The settings list itself is the main menu's SETTINGS category (spec
+ * §14.13 — there is no settings-tree page): its rows carry their real
+ * targets, and Call Preference toggles in place through ui_settings_
+ * activate(). This module owns the two pages that category reaches:
+ *
+ *   DISPLAY    Theme              DARK | LIGHT
+ *              Font               -> HEADERS / TEXT / SUBTEXT
+ *              Menu Style         CAROUSEL | GRID | MOVING
+ *              Softkey bar        SHOWN | HIDDEN
+ *
+ *   FONT       Headers            "<FACE> <px>", CENTER = next ladder entry
+ *              Text
+ *              Subtext
  *
  * Pages are data (spec §4): each page is one menu_t, and every row's value
  * lives in its `meta` field, which the generic renderer (ui_menu.c) draws
@@ -15,23 +29,7 @@
  * picked), the shell owns the LVGL objects and the appearance passes. The
  * settings module therefore has no LVGL dependency at all.
  *
- * Tree (spec §14.9-14.12):
- *
- *   SETTINGS   Display            -> THEME, FONT, MENU STYLE, SOFTKEY BAR
- *              Call Preference
- *              Speed Dials        (sub-page)
- *              Held Presses       (sub-page)
- *
- *   DISPLAY    Theme              DARK | LIGHT
- *              Font               -> HEADERS / TEXT / SUBTEXT
- *              Menu Style         CAROUSEL | GRID | MOVING
- *              Softkey bar        SHOWN | HIDDEN
- *
- *   FONT       Headers            "<FACE> <px>", CENTER = next ladder entry
- *              Text
- *              Subtext
- *
- * This page is a READER + WRITER for the settings state: every value lives
+ * This module is a READER + WRITER for the settings state: every value lives
  * in the model layer (model/settings.c, spec §16.4), which persists it
  * through hal_storage.
  */
@@ -64,26 +62,6 @@ static const keymap_t km_settings = {
     .end        = ACT_GOTO_HOME,
     .up         = ACT_MOVE_SEL_UP,
     .down       = ACT_MOVE_SEL_DOWN,
-};
-
-/* Rows: label + icon fixed; `meta` points at the live value text (set by
- * refresh_values()). Rows with a target open a sub-page instead. */
-static menu_item_t g_items[N_SETTINGS] = {
-    { .label = "Display",         .icon = I_PALETTE, .target = PAGE_DISPLAY },
-    { .label = "Call Preference", .icon = I_PHONE, .target = PAGE_NONE },
-    { .label = "Speed Dials",     .icon = I_USER,  .target = PAGE_SPEED_DIALS },
-    { .label = "Held Presses",    .icon = I_BOLT,  .target = PAGE_HELD_PRESS },
-};
-
-static menu_t g_page = {
-    .title   = "SETTINGS",
-    .items   = g_items,
-    .n_items = N_SETTINGS,
-    .sel     = 0,
-    .cats    = NULL,
-    .n_cats  = 0,
-    .cat_sel = 0,
-    .keys    = km_settings,
 };
 
 /* ------------------------------------------------------------------ */
@@ -162,8 +140,6 @@ static void refresh_values(void)
 {
     const model_settings_t *s = model_settings();
 
-    g_items[SETTING_CALL_PREF].meta = g_call_pref_vals[s->call_pref];
-
     g_disp_items[DISPLAY_THEME].meta =
         ui_theme_name((ui_theme_id_t)(ui_theme_get() == UI_THEME_DARK ? 0 : 1));
 
@@ -179,10 +155,9 @@ static void refresh_values(void)
 /* Public API                                                          */
 /* ------------------------------------------------------------------ */
 
-menu_t *ui_settings_page(void)
+const char *ui_settings_call_pref_name(void)
 {
-    refresh_values();
-    return &g_page;
+    return g_call_pref_vals[model_settings()->call_pref];
 }
 
 menu_t *ui_settings_display_page(void)
@@ -205,11 +180,12 @@ ui_setting_effect_t ui_settings_activate(uint8_t sel)
     const model_settings_t *s = model_settings();
     switch (sel) {
     case SETTING_CALL_PREF:
+        /* The main menu's Call Preference row toggles in place here (spec
+         * §14.13); the menu repoints its meta and refreshes the row. */
         model_settings_set_call_pref(s->call_pref ^ 1);
         break;
     default:                return UI_SETTING_EFFECT_NONE;  /* navigable */
     }
-    refresh_values();
     return UI_SETTING_EFFECT_NONE;
 }
 

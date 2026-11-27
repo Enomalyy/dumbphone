@@ -50,11 +50,10 @@ typedef enum {
     PAGE_ROUTES,        /* Maps                                        */
     PAGE_LINES,         /* Maps                                        */
     PAGE_STATIONS,      /* Maps                                        */
-    PAGE_SETTINGS,      /* Settings tree                               */
-    PAGE_DISPLAY,       /* Settings > Display: theme, font, menu style */
-    PAGE_FONT,          /* Settings > Display > Font: 3 system faces   */
-    PAGE_SPEED_DIALS,   /* Settings: speed-dial config sub-page        */
-    PAGE_HELD_PRESS,    /* Settings: held-press key config sub-page    */
+    PAGE_DISPLAY,       /* SETTINGS category: theme/font/menu/bar      */
+    PAGE_FONT,          /* Display > Font: 3 system faces              */
+    PAGE_SPEED_DIALS,   /* SETTINGS category: T9 1..9 names            */
+    PAGE_HELD_PRESS,    /* SETTINGS category: long-press remap         */
 } page_id_t;
 
 /* One row of a list page. `sub`, `meta` and `badge` are optional: the

@@ -22,7 +22,7 @@
  *   dumbphone-desktop --shot out.ppm        panel only (device pixels)
  *   dumbphone-desktop --shot-win out.ppm    composed mock-up (bezel + panel)
  *   options: --screen <name>     one of the page registry's names (ui_pages.h):
- *            home chat menu settings display font speeddials heldpress
+ *            home chat menu display font speeddials heldpress
  *            callhist contacts stub lock
  *            --press <button-id>
  *            --cycle left|right N  --key <name> [N]  --activate N

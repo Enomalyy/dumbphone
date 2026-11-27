@@ -390,7 +390,7 @@ static list_page_t *page_lists[UI_PAGE_COUNT];
 
 /* Row positions in ui_pages[] (one row per screen — see pages_selfcheck). */
 enum {
-    ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_SETTINGS, ROW_DISPLAY,
+    ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_DISPLAY,
     ROW_FONT, ROW_SPEEDDIALS, ROW_HELDPRESS, ROW_CALLHIST, ROW_CONTACTS,
     ROW_STUB, ROW_LOCK, ROW_CONV,
 };
@@ -618,17 +618,9 @@ static lv_obj_t *page_menu_build(void)
     return p ? ui_list_root(p) : NULL;
 }
 
-/* Settings tree — a canonical list page over ui_settings' menu_t. Rows
- * carry their live value in `meta`; CENTER flips two-state rows (the shell
- * refreshes the rows via ui_list_refresh). */
-static lv_obj_t *page_settings_build(void)
-{
-    list_page_t *p = ui_list_build(content_area, ui_settings_page());
-    page_lists[ROW_SETTINGS] = p;
-    return p ? ui_list_root(p) : NULL;
-}
-
-/* Settings > Display — theme / font / menu style / softkey bar (spec §14). */
+/* SETTINGS category > Display — theme / font / menu style / softkey bar
+ * (spec §14). Rows carry their live value in `meta`; CENTER flips two-state
+ * rows (the shell refreshes the rows via ui_list_refresh). */
 static lv_obj_t *page_display_build(void)
 {
     list_page_t *p = ui_list_build(content_area, ui_settings_display_page());
@@ -696,7 +688,6 @@ static lv_obj_t *page_conv_build(void)
 }
 
 /* Keymap wrappers — the list pages own their keymap inside their menu_t. */
-static const keymap_t *page_settings_keymap(void)  { return &ui_settings_page()->keys; }
 static const keymap_t *page_display_keymap(void)   { return &ui_settings_display_page()->keys; }
 static const keymap_t *page_font_keymap(void)      { return &ui_settings_font_page()->keys; }
 static const keymap_t *page_speeddial_keymap(void) { return &ui_speeddial_page()->keys; }
@@ -732,26 +723,20 @@ static void page_chatlist_activate(void)
 
 static void page_menu_activate(void)
 {
-    /* A SETTINGS-category item names the settings row it stands for; land
-     * on that row (read before open_page() changes screens). */
-    int row = ui_mainmenu_selected_setting();
     page_id_t t = ui_list_selected_target(page_lists[ROW_MENU]);
-    open_page(t);
-    if (t == PAGE_SETTINGS && row >= 0) {
-        ui_list_select(page_lists[ROW_SETTINGS], row);
-    }
-}
-
-static void page_settings_activate(void)
-{
-    list_page_t *p = page_lists[ROW_SETTINGS];
-    page_id_t t = ui_list_selected_target(p);
     if (t == PAGE_NONE) {
-        ui_settings_activate(ui_list_sel(p));
-        ui_list_refresh(p);
-    } else {
-        open_page(t);   /* navigable row (a config sub-page) */
+        /* A value item of the SETTINGS category (Call Preference): toggle
+         * in place through the settings handler, then show the new value
+         * on the row's meta column. PAGE_NONE elsewhere is inert. */
+        int row = ui_mainmenu_selected_setting();
+        if (row >= 0) {
+            ui_settings_activate((uint8_t)row);
+            ui_mainmenu_refresh_meta();
+            ui_list_refresh(page_lists[ROW_MENU]);
+        }
+        return;
     }
+    open_page(t);   /* real target: Display / Speed Dials / Held Presses */
 }
 
 static void page_display_activate(void)
@@ -797,9 +782,14 @@ static void page_heldpress_activate(void)
 static void page_menu_cycle(int dir)     { ui_mainmenu_cycle_cat(dir); }
 static void page_chatlist_cycle(int dir) { ui_messaging_cycle_cat(dir); }
 
-/* The menu's layout (carousel vs grid) is synced each time the menu is
- * shown — the old show_screen() special case, now a row field. */
-static void page_menu_on_show(void) { ui_mainmenu_sync_layout(); }
+/* The menu's layout (carousel vs grid) and its value metas are synced each
+ * time the menu is shown — the old show_screen() special case, now a row
+ * field. */
+static void page_menu_on_show(void)
+{
+    ui_mainmenu_sync_layout();
+    ui_mainmenu_refresh_meta();
+}
 
 /* THE table. Order: CHATLIST first (build dependency), then the rest in
  * screen-enum order. */
@@ -808,7 +798,6 @@ const ui_page_t ui_pages[] = {
     { "chat",       PAGE_CHATLIST,   UI_SCREEN_CHATLIST, page_chatlist_build, ui_messaging_keymap,  page_chatlist_activate,   page_chatlist_cycle,    ui_opts_chatlist,     NULL },
     { "home",       PAGE_NONE,       UI_SCREEN_HOME,     page_home_build,     ui_home_keymap,       page_home_activate,     NULL,                 ui_opts_home,         NULL },
     { "menu",       PAGE_NONE,       UI_SCREEN_MENU,     page_menu_build,     ui_mainmenu_keymap,   page_menu_activate,     page_menu_cycle,      ui_opts_menu,         page_menu_on_show },
-    { "settings",   PAGE_SETTINGS,   UI_SCREEN_SETTINGS, page_settings_build, page_settings_keymap, page_settings_activate, NULL,                 ui_opts_settings,     NULL },
     { "display",    PAGE_DISPLAY,    UI_SCREEN_DISPLAY,  page_display_build,  page_display_keymap,  page_display_activate,  NULL,                 ui_opts_display,      NULL },
     { "font",       PAGE_FONT,       UI_SCREEN_FONT,     page_font_build,     page_font_keymap,     page_font_activate,     NULL,                 ui_opts_font,         NULL },
     { "speeddials", PAGE_SPEED_DIALS,UI_SCREEN_SPEEDDIALS,page_speeddial_build,page_speeddial_keymap,page_speeddial_activate,NULL,                ui_opts_speeddial,    NULL },
@@ -984,6 +973,17 @@ static void sidebar_execute(int idx)
         return;                    /* navigation already closed it     */
     case OPT_ACTION_MAIN_MENU:
         push_screen(UI_SCREEN_MENU);   /* closes the sidebar */
+        return;
+    case OPT_ACTION_SETTINGS_CAT:      /* spec §14.13: settings live in the
+                                         * menu's SETTINGS category — there
+                                         * is no settings page to push */
+        if (screen_stack[stack_top] != UI_SCREEN_MENU) {
+            push_screen(UI_SCREEN_MENU);   /* closes the sidebar */
+        } else {
+            ui_sidebar_close();
+        }
+        ui_mainmenu_select_cat(MAINMENU_CAT_SETTINGS);
+        update_softkeys(page_keymap());
         return;
     }
     ui_sidebar_close();   /* in-place action (view toggle): close after */

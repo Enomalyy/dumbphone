@@ -67,15 +67,21 @@ static const menu_item_t cat_maps[] = {
     { .label = "Stations",         .icon = I_JOURNAL,  .target = PAGE_STATIONS    },
 };
 
-static const menu_item_t cat_settings[] = {
-    { .label = "Display",         .icon = I_PALETTE,.target = PAGE_SETTINGS },
-    { .label = "Call Preference", .icon = I_PHONE,  .target = PAGE_SETTINGS },
-    { .label = "Speed Dials",     .icon = I_USER,   .target = PAGE_SETTINGS },
-    { .label = "Held Presses",    .icon = I_BOLT,   .target = PAGE_SETTINGS },
+/* The SETTINGS category IS the settings list (spec §14.13 — there is no
+ * settings-tree page): each item carries its real target, and Call
+ * Preference is a value, not a page — CENTER toggles it in place and the
+ * row's `meta` column shows the current setting. The items are mutable for
+ * that meta pointer (refresh_meta() repoints it). */
+static menu_item_t cat_settings[] = {
+    { .label = "Display",         .icon = I_PALETTE, .target = PAGE_DISPLAY },
+    { .label = "Call Preference", .icon = I_PHONE,   .target = PAGE_NONE },
+    { .label = "Speed Dials",     .icon = I_USER,    .target = PAGE_SPEED_DIALS },
+    { .label = "Held Presses",    .icon = I_BOLT,    .target = PAGE_HELD_PRESS },
 };
 
-/* The settings row each SETTINGS-category item lands on, by name, so the
- * two lists may be reordered independently. One entry per cat_settings row. */
+/* The settings row (a setting_id_t) each SETTINGS-category item stands for,
+ * so the menu's rows and the settings state may be reordered independently.
+ * One entry per cat_settings row. */
 static const setting_id_t cat_settings_rows[] = {
     SETTING_DISPLAY,
     SETTING_CALL_PREF,
@@ -163,6 +169,7 @@ list_page_t *ui_mainmenu_build(lv_obj_t *parent)
      * carousel/grid are two renderings of the same menu_t data). */
     g_menu_m.layout = ui_settings_menu_style() == MENU_STYLE_GRID ? LAYOUT_GRID
                                                                   : LAYOUT_LIST;
+    ui_mainmenu_refresh_meta();
     g_menu   = ui_list_build(parent, &g_menu_m);
     ui_list_set_gesture_cb(g_menu, menu_gesture);   /* swipes cycle cats */
     ui_list_set_cat_cb(g_menu, menu_cat_tap);       /* tappable strip (§14.1) */
@@ -187,8 +194,15 @@ int ui_mainmenu_selected_setting(void)
     return (int)cat_settings_rows[g_menu_m.sel];
 }
 
+/* Point the Call Preference row's meta at its live value string (the
+ * settings module owns the strings; they are static and outlive this). */
+void ui_mainmenu_refresh_meta(void)
+{
+    cat_settings[SETTING_CALL_PREF].meta = ui_settings_call_pref_name();
+}
+
 /* Re-apply the settings' menu style to the main menu. The toggle lives on
- * the Settings page, so the layout is synced each time the menu is shown:
+ * the Display page, so the layout is synced each time the menu is shown:
  * carousel/grid are two renderings of the same menu_t data (spec §2). */
 void ui_mainmenu_sync_layout(void)
 {

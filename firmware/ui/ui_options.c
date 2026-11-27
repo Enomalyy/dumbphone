@@ -28,36 +28,31 @@ static const opt_entry_t opts_messaging[] = {
     { "Contacts",     I_USERS,    OPT_ACTION_PAGE, PAGE_CONTACTS },
 };
 
-/* Main menu: a jump to the settings tree. The main-menu view is chosen
- * by Settings/Display's one cycling Menu Style row (spec §14.3) — the
- * sidebar no longer carries per-style entries. */
+/* Main menu: its SETTINGS category is where settings live (spec §14.13) —
+ * the entry switches the menu to it. The main-menu view is chosen by
+ * Display's one cycling Menu Style row (spec §14.3) — the sidebar no longer
+ * carries per-style entries. */
 static const opt_entry_t opts_menu[] = {
-    { "Settings", I_ELLIPSIS, OPT_ACTION_PAGE, PAGE_SETTINGS },
+    { "Settings", I_ELLIPSIS, OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 
-/* Settings tree: its two config sub-pages. */
-static const opt_entry_t opts_settings[] = {
-    { "Speed Dials",  I_USER, OPT_ACTION_PAGE, PAGE_SPEED_DIALS },
-    { "Held Presses", I_BOLT, OPT_ACTION_PAGE, PAGE_HELD_PRESS },
-};
-
-/* Display page: the three font roles are one level deeper; the settings
- * tree and the main menu are one back. */
+/* Display page: the three font roles are one level deeper; the menu's
+ * SETTINGS category is one back. */
 static const opt_entry_t opts_display[] = {
     { "Font Roles", I_TH,        OPT_ACTION_PAGE, PAGE_FONT },
-    { "Settings",   I_GEAR,      OPT_ACTION_PAGE, PAGE_SETTINGS },
+    { "Settings",   I_GEAR,      OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 static const opt_entry_t opts_font[] = {
     { "Display",  I_TH,   OPT_ACTION_PAGE, PAGE_DISPLAY },
-    { "Settings", I_GEAR, OPT_ACTION_PAGE, PAGE_SETTINGS },
+    { "Settings", I_GEAR, OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 
-/* Config sub-pages: back to the settings tree they belong to. */
+/* Config sub-pages: back to the menu's SETTINGS category. */
 static const opt_entry_t opts_speeddial[] = {
-    { "Settings", I_GEAR, OPT_ACTION_PAGE, PAGE_SETTINGS },
+    { "Settings", I_GEAR, OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 static const opt_entry_t opts_heldpress[] = {
-    { "Settings", I_GEAR, OPT_ACTION_PAGE, PAGE_SETTINGS },
+    { "Settings", I_GEAR, OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 
 /* Call history: a compose entry + the contacts list. */
@@ -81,7 +76,6 @@ static const opt_entry_t opts_stub[] = {
 const opt_entry_t *ui_opts_home(int *n)      { *n = 3; return opts_home; }
 const opt_entry_t *ui_opts_chatlist(int *n)  { *n = 3; return opts_messaging; }
 const opt_entry_t *ui_opts_menu(int *n)      { *n = 1; return opts_menu; }
-const opt_entry_t *ui_opts_settings(int *n)  { *n = 2; return opts_settings; }
 const opt_entry_t *ui_opts_display(int *n)   { *n = 2; return opts_display; }
 const opt_entry_t *ui_opts_font(int *n)      { *n = 2; return opts_font; }
 const opt_entry_t *ui_opts_speeddial(int *n) { *n = 1; return opts_speeddial; }

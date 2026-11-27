@@ -26,6 +26,7 @@ extern "C" {
 typedef enum {
     OPT_ACTION_PAGE = 0,       /* open `target` (a page_id_t)         */
     OPT_ACTION_MAIN_MENU,      /* go to the main menu                 */
+    OPT_ACTION_SETTINGS_CAT,   /* main menu -> its SETTINGS category  */
 } opt_action_t;
 
 /* One row of the options sidebar. `label` must fit one line in the
@@ -44,7 +45,6 @@ typedef struct {
 const opt_entry_t *ui_opts_home(int *n);
 const opt_entry_t *ui_opts_chatlist(int *n);
 const opt_entry_t *ui_opts_menu(int *n);
-const opt_entry_t *ui_opts_settings(int *n);
 const opt_entry_t *ui_opts_display(int *n);
 const opt_entry_t *ui_opts_font(int *n);
 const opt_entry_t *ui_opts_speeddial(int *n);

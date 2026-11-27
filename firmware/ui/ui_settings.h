@@ -1,10 +1,11 @@
 /*
- * ui_settings.h — the Settings tree and its Display / Font sub-pages.
+ * ui_settings.h — the settings state and its Display / Font pages.
  *
- * Three canonical menu_t pages, all rendered by the same generic renderer as
- * every other list page:
+ * The settings list itself lives in the main menu's SETTINGS category
+ * (spec §14.13 — there is no settings-tree page); this module owns the two
+ * pages that category reaches, both canonical menu_t pages rendered by the
+ * same generic renderer as every other list page:
  *
- *   SETTINGS  Display (navigable) · Call Preference · Speed Dials · Held Presses
  *   DISPLAY   Theme · Font (navigable) · Menu Style · Softkey bar
  *   FONT      Headers · Text · Subtext   (spec §14.12's three levels)
  *
@@ -14,8 +15,8 @@
  * switch and restyle, a font reload, or a re-layout — because the shell owns
  * the LVGL objects and the appearance passes. This module is LVGL-free.
  *
- * State is static and in-memory: no persistence yet (the on-device store
- * arrives with the WAHA backbone, spec §9).
+ * State lives in the model layer (model/settings.c, spec §16.4) and persists
+ * through hal_storage.
  */
 #pragma once
 
@@ -62,15 +63,20 @@ typedef enum {
 #define CALL_PREF_WHATSAPP  0
 #define CALL_PREF_STANDARD  1
 
-/* The three pages (static data; the shell builds the renderer on top of each
+/* The two pages (static data; the shell builds the renderer on top of each
  * once, and refreshes the rows after a change). */
-menu_t *ui_settings_page(void);
 menu_t *ui_settings_display_page(void);
 menu_t *ui_settings_font_page(void);
 
-/* CENTER on row `sel` of each page. Applies the value and returns what the
- * shell still has to do (see ui_setting_effect_t). Inert for rows that open
- * a sub-page. UI thread or before it starts. */
+/* The current Call Preference value as its display string ("WHATSAPP" /
+ * "STANDARD"). The main menu's SETTINGS category shows it on its Call
+ * Preference row's meta column. */
+const char *ui_settings_call_pref_name(void);
+
+/* CENTER on row `sel` of the settings list (a setting_id_t, from the main
+ * menu's SETTINGS category). Applies the value and returns what the shell
+ * still has to do (see ui_setting_effect_t). Inert for rows that open a
+ * sub-page. UI thread or before it starts. */
 ui_setting_effect_t ui_settings_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_display_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_font_activate(uint8_t sel);

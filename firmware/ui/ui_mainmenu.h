@@ -15,6 +15,10 @@
 #include "ui_menu.h"     /* menu_t, list_page_t */
 #include "ui_keymap.h"   /* keymap_t */
 
+/* The SETTINGS category's index in the strip (MESSAGING · CALLS · MAPS ·
+ * SETTINGS) — the sidebar's settings entry lands here (spec §14.13). */
+#define MAINMENU_CAT_SETTINGS 3
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -41,6 +45,10 @@ void ui_mainmenu_select_cat(int cat);
 /* The settings row (a setting_id_t) the selected item stands for, or -1
  * when the menu is not on its SETTINGS category. */
 int ui_mainmenu_selected_setting(void);
+
+/* Repoint the SETTINGS category's value metas at their live strings (the
+ * Call Preference row). Called on build, on show, and after a toggle. */
+void ui_mainmenu_refresh_meta(void);
 
 /* Re-apply the settings' menu style to the main menu. The toggle lives on
  * the Settings page, so the layout is synced each time the menu is shown

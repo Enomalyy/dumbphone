@@ -180,3 +180,16 @@ git.** History (relay legs, audits, commit ranges, build narratives) belongs in 
 file, ROADMAP and git — never in an AGENTS.md.
 
 ---
+
+## 18. The settings tree is deleted — one list, one place (27/11, issue #15)
+
+Eli reported the duplicate three times: from the main menu, pressing *Display* opened the
+settings tree — the same four rows — with one pre-selected, so a second press was needed to
+reach Display. The fix is structural, not cosmetic: each SETTINGS-category item carries its
+**real** target (Display / Speed Dials / Held Presses), **Call Preference** is a value that
+toggles in place through `ui_settings_activate()` with its state on the row's `meta` column,
+and the tree screen itself (`PAGE_SETTINGS`, `UI_SCREEN_SETTINGS`, its registry row) is
+deleted — while it exists, the duplicate can always come back. The sidebar's "Settings"
+entries now switch the menu to the SETTINGS category (a new `OPT_ACTION_SETTINGS_CAT`).
+The rule is written into spec §14.13: *a page may not re-list another page's rows — if two
+screens show the same list, one of them is a bug.*
