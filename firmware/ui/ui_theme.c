@@ -39,6 +39,9 @@
  *          TEXT_DIM/SURFACE 5.7   ON_HIGHLIGHT/HIGHLIGHT 5.6
  *   MONO   TEXT/GROUND 17.7   TEXT/SURFACE 15.6   TEXT_DIM/GROUND 9.4
  *          TEXT_DIM/SURFACE 8.3   ON_HIGHLIGHT/HIGHLIGHT 11.8
+ *          ACCENT/GROUND 11.5   ACCENT/SURFACE 10.1 (cyan detail accent;
+ *          it only ever lands on GROUND or SURFACE — icons, active tab,
+ *          chevrons, carets; selected rows use ON_HIGHLIGHT instead)
  *
  * DARK is the concept-art/07 palette every golden frame was shot with; its
  * values are therefore the pre-role ones unchanged (bg/bg_alt/sel/sel_edge/
@@ -96,7 +99,7 @@ static const uint32_t g_theme_rgb[UI_THEME_COUNT][UI_ROLE_COUNT] = {
         [UI_ROLE_BORDER]       = 0x8C8C8C,   /* mid grey structural      */
         [UI_ROLE_TEXT]         = 0xF2F2F2,   /* near-white               */
         [UI_ROLE_TEXT_DIM]     = 0xB3B3B3,   /* light grey               */
-        [UI_ROLE_ACCENT]       = 0xE8E8E8,   /* white accent             */
+        [UI_ROLE_ACCENT]       = 0x3FD8E8,   /* cyan: = DARK's ACCENT    */
         [UI_ROLE_HIGHLIGHT]    = 0xC8C8C8,   /* light-grey fill          */
         [UI_ROLE_ACCENT_ALT]   = 0xA6A6A6,   /* grey                     */
         [UI_ROLE_ON_HIGHLIGHT] = 0x0A0A0A,   /* = GROUND: 11.8:1 on fill */
