@@ -51,6 +51,7 @@ typedef enum {
     PAGE_LINES,         /* Maps                                        */
     PAGE_STATIONS,      /* Maps                                        */
     PAGE_DISPLAY,       /* SETTINGS category: theme/font/menu/bar      */
+    PAGE_THEME,         /* Display > Theme: the named palettes (§14.11) */
     PAGE_FONT,          /* Display > Font: 3 system faces              */
     PAGE_SPEED_DIALS,   /* SETTINGS category: T9 1..9 names            */
     PAGE_HELD_PRESS,    /* SETTINGS category: long-press remap         */

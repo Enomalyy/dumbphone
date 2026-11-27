@@ -6,7 +6,8 @@
  * pages that category reaches, both canonical menu_t pages rendered by the
  * same generic renderer as every other list page:
  *
- *   DISPLAY   Theme · Font (navigable) · Menu Style · Softkey bar
+ *   DISPLAY   Theme (submenu) · Font (navigable) · Menu Style · Softkey bar
+ *   THEME     one row per named palette; the active one shows ACTIVE
  *   FONT      Headers · Text · Subtext   (spec §14.12's three levels)
  *
  * A row without a `target` is a VALUE row: CENTER cycles it. The page
@@ -40,7 +41,7 @@ typedef enum {
 
 /* The DISPLAY page's rows, in order (spec §14.9–14.12). */
 typedef enum {
-    DISPLAY_THEME = 0,        /* DARK | LIGHT                   */
+    DISPLAY_THEME = 0,        /* submenu: the named palettes    */
     DISPLAY_FONT,             /* sub-page: the three font roles */
     DISPLAY_MENU_STYLE,       /* CAROUSEL | GRID                */
     DISPLAY_SOFTKEYS,         /* SHOWN | HIDDEN                 */
@@ -63,9 +64,10 @@ typedef enum {
 #define CALL_PREF_WHATSAPP  0
 #define CALL_PREF_STANDARD  1
 
-/* The two pages (static data; the shell builds the renderer on top of each
- * once, and refreshes the rows after a change). */
+/* The three pages (static data; the shell builds the renderer on top of
+ * each once, and refreshes the rows after a change). */
 menu_t *ui_settings_display_page(void);
+menu_t *ui_settings_theme_page(void);
 menu_t *ui_settings_font_page(void);
 
 /* The current Call Preference value as its display string ("WHATSAPP" /
@@ -79,6 +81,7 @@ const char *ui_settings_call_pref_name(void);
  * sub-page. UI thread or before it starts. */
 ui_setting_effect_t ui_settings_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_display_activate(uint8_t sel);
+ui_setting_effect_t ui_settings_theme_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_font_activate(uint8_t sel);
 
 /* Current menu style (CAROUSEL / GRID / MOVING — one cycling control,

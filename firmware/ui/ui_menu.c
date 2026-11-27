@@ -131,7 +131,11 @@ static lv_obj_t *mk_label(lv_obj_t *parent, const char *text, lv_font_t *font,
                           lv_color_t color, int x, int y, int w)
 {
     lv_obj_t *lbl = lv_label_create(parent);
-    lv_label_set_text(lbl, text);
+    /* A NULL text must clear the label: a fresh LVGL label starts with
+     * LV_LABEL_DEFAULT_TEXT ("Text"), and lv_label_set_text(NULL) keeps the
+     * current text — so a row without an icon would draw a wrapped "Text"
+     * in its icon column (first seen on the icon-less Theme page, #11). */
+    lv_label_set_text(lbl, text ? text : "");
     lv_obj_set_style_text_font(lbl, font, 0);
     lv_obj_set_style_text_color(lbl, color, 0);
     lv_obj_remove_flag(lbl, LV_OBJ_FLAG_CLICKABLE);

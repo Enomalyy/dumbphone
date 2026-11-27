@@ -7,10 +7,13 @@
  * targets, and Call Preference toggles in place through ui_settings_
  * activate(). This module owns the two pages that category reaches:
  *
- *   DISPLAY    Theme              DARK | LIGHT
+ *   DISPLAY    Theme              -> the Theme submenu (named palettes)
  *              Font               -> HEADERS / TEXT / SUBTEXT
  *              Menu Style         CAROUSEL | GRID | MOVING
  *              Softkey bar        SHOWN | HIDDEN
+ *
+ *   THEME      one row per palette, its name; the active one shows ACTIVE
+ *              in its value column — CENTER applies it (spec §14.11)
  *
  *   FONT       Headers            "<FACE> <px>", CENTER = next ladder entry
  *              Text
@@ -18,7 +21,7 @@
  *
  * Pages are data (spec §4): each page is one menu_t, and every row's value
  * lives in its `meta` field, which the generic renderer (ui_menu.c) draws
- * right-aligned. CENTER on a value row cycles it and repoints `meta` at the
+ * right-aligned. CENTER on a value row applies it and repoints `meta` at the
  * new string; the shell then
  *
  *   - refreshes the page (ui_list_refresh), and
@@ -72,7 +75,7 @@ static menu_item_t g_disp_items[N_DISPLAY_SETTINGS] = {
     /* Icons say what the row is, or there is none: theme = dark/light
      * contrast, font = a face, menu style = the grid view, and the bar is
      * its own shape — no glyph pretends to summarise it. */
-    { .label = "Theme",       .icon = I_ADJUST,  .target = PAGE_NONE },
+    { .label = "Theme",       .icon = I_ADJUST,  .target = PAGE_THEME },
     { .label = "Font",        .icon = I_FONT,    .target = PAGE_FONT },
     { .label = "Menu Style",  .icon = I_TH,      .target = PAGE_NONE },
     { .label = "Softkey bar", .icon = "",        .target = PAGE_NONE },
@@ -90,6 +93,36 @@ static menu_t g_display_page = {
 };
 
 static const char *const g_softkey_vals[] = { "SHOWN", "HIDDEN" };
+
+/* ------------------------------------------------------------------ */
+/* Theme page — one row per named palette (spec §14.11)                */
+/* ------------------------------------------------------------------ */
+
+/* The rows ARE the palettes: label = the theme's name, value column =
+ * ACTIVE on the current one. CENTER applies the row's theme immediately
+ * (no confirm — §14.11); ui_theme_set() runs the shell's apply pass, so
+ * the whole UI repaints before the rows refresh with the marker moved. */
+static menu_item_t g_theme_items[UI_THEME_COUNT];
+
+static menu_t g_theme_page = {
+    .title   = "THEME",
+    .items   = g_theme_items,
+    .n_items = UI_THEME_COUNT,
+    .sel     = 0,
+    .cats    = NULL,
+    .n_cats  = 0,
+    .cat_sel = 0,
+    .keys    = km_settings,
+};
+
+static void refresh_theme_meta(void)
+{
+    ui_theme_id_t cur = ui_theme_get();
+    for (int i = 0; i < UI_THEME_COUNT; i++) {
+                g_theme_items[i].label = ui_theme_name((ui_theme_id_t)i);
+        g_theme_items[i].meta  = (i == cur) ? "ACTIVE" : NULL;
+    }
+}
 
 /* ------------------------------------------------------------------ */
 /* Font page — the three roles of spec §14.12                          */
@@ -140,8 +173,9 @@ static void refresh_values(void)
 {
     const model_settings_t *s = model_settings();
 
-    g_disp_items[DISPLAY_THEME].meta =
-        ui_theme_name((ui_theme_id_t)(ui_theme_get() == UI_THEME_DARK ? 0 : 1));
+    /* The Theme row is a menu entry now (issue #11): its value column shows
+     * the active theme's name, and CENTER opens the Theme submenu. */
+    g_disp_items[DISPLAY_THEME].meta = ui_theme_name(ui_theme_get());
 
     g_disp_items[DISPLAY_MENU_STYLE].meta = g_menu_style_vals[s->menu_style];
 
@@ -164,6 +198,12 @@ menu_t *ui_settings_display_page(void)
 {
     refresh_values();
     return &g_display_page;
+}
+
+menu_t *ui_settings_theme_page(void)
+{
+    refresh_theme_meta();
+    return &g_theme_page;
 }
 
 menu_t *ui_settings_font_page(void)
@@ -199,14 +239,8 @@ ui_setting_effect_t ui_settings_display_activate(uint8_t sel)
 
     switch (sel) {
     case DISPLAY_THEME:
-        /* DARK <-> LIGHT. ui_theme_set() resolves the palette and runs the
-         * shell's apply pass, so the whole UI repaints immediately. */
-        ui_theme_set(ui_theme_get() == UI_THEME_DARK ? UI_THEME_LIGHT
-                                                     : UI_THEME_DARK);
-        effect = UI_SETTING_EFFECT_THEME;
-        break;
     case DISPLAY_FONT:
-        return UI_SETTING_EFFECT_NONE;   /* navigable row */
+        return UI_SETTING_EFFECT_NONE;   /* navigable rows */
     case DISPLAY_MENU_STYLE:
         uint8_t next = (uint8_t)((s->menu_style + 1) % 3);
         model_settings_set_menu_style(next);
@@ -223,6 +257,19 @@ ui_setting_effect_t ui_settings_display_activate(uint8_t sel)
 
     refresh_values();
     return effect;
+}
+
+ui_setting_effect_t ui_settings_theme_activate(uint8_t sel)
+{
+    if (sel >= UI_THEME_COUNT) {
+        return UI_SETTING_EFFECT_NONE;
+    }
+    /* Applies the row's palette immediately (no confirm — §14.11).
+     * ui_theme_set() resolves it and runs the shell's apply pass, so the
+     * whole UI repaints before the caller refreshes the rows. */
+    ui_theme_set((ui_theme_id_t)sel);
+    refresh_theme_meta();
+    return UI_SETTING_EFFECT_THEME;
 }
 
 ui_setting_effect_t ui_settings_font_activate(uint8_t sel)

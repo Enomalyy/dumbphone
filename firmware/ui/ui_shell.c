@@ -390,7 +390,7 @@ static list_page_t *page_lists[UI_PAGE_COUNT];
 
 /* Row positions in ui_pages[] (one row per screen — see pages_selfcheck). */
 enum {
-    ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_DISPLAY,
+    ROW_CHATLIST = 0, ROW_HOME, ROW_MENU, ROW_DISPLAY, ROW_THEME,
     ROW_FONT, ROW_SPEEDDIALS, ROW_HELDPRESS, ROW_CALLHIST, ROW_CONTACTS,
     ROW_STUB, ROW_LOCK, ROW_CONV,
 };
@@ -628,6 +628,15 @@ static lv_obj_t *page_display_build(void)
     return p ? ui_list_root(p) : NULL;
 }
 
+/* Settings > Display > Theme — the named palettes (spec §14.11): one row
+ * per theme, CENTER applies it through ui_settings_theme_activate(). */
+static lv_obj_t *page_theme_build(void)
+{
+    list_page_t *p = ui_list_build(content_area, ui_settings_theme_page());
+    page_lists[ROW_THEME] = p;
+    return p ? ui_list_root(p) : NULL;
+}
+
 /* Settings > Display > Font — headers / text / subtext (spec §14.12). */
 static lv_obj_t *page_font_build(void)
 {
@@ -689,6 +698,7 @@ static lv_obj_t *page_conv_build(void)
 
 /* Keymap wrappers — the list pages own their keymap inside their menu_t. */
 static const keymap_t *page_display_keymap(void)   { return &ui_settings_display_page()->keys; }
+static const keymap_t *page_theme_keymap(void)     { return &ui_settings_theme_page()->keys; }
 static const keymap_t *page_font_keymap(void)      { return &ui_settings_font_page()->keys; }
 static const keymap_t *page_speeddial_keymap(void) { return &ui_speeddial_page()->keys; }
 static const keymap_t *page_heldpress_keymap(void) { return &ui_heldpress_page()->keys; }
@@ -756,6 +766,16 @@ static void page_display_activate(void)
     }
 }
 
+static void page_theme_activate(void)
+{
+    list_page_t *p = page_lists[ROW_THEME];
+    /* The palette applies immediately (no confirm — §14.11); the apply
+     * pass already ran inside ui_theme_set(), so only the rows' ACTIVE
+     * marker needs refreshing. */
+    ui_settings_theme_activate(ui_list_sel(p));
+    ui_list_refresh(p);
+}
+
 static void page_font_activate(void)
 {
     list_page_t *p = page_lists[ROW_FONT];
@@ -799,6 +819,7 @@ const ui_page_t ui_pages[] = {
     { "home",       PAGE_NONE,       UI_SCREEN_HOME,     page_home_build,     ui_home_keymap,       page_home_activate,     NULL,                 ui_opts_home,         NULL },
     { "menu",       PAGE_NONE,       UI_SCREEN_MENU,     page_menu_build,     ui_mainmenu_keymap,   page_menu_activate,     page_menu_cycle,      ui_opts_menu,         page_menu_on_show },
     { "display",    PAGE_DISPLAY,    UI_SCREEN_DISPLAY,  page_display_build,  page_display_keymap,  page_display_activate,  NULL,                 ui_opts_display,      NULL },
+    { "theme",      PAGE_THEME,      UI_SCREEN_THEME,    page_theme_build,    page_theme_keymap,    page_theme_activate,    NULL,                 ui_opts_theme,        NULL },
     { "font",       PAGE_FONT,       UI_SCREEN_FONT,     page_font_build,     page_font_keymap,     page_font_activate,     NULL,                 ui_opts_font,         NULL },
     { "speeddials", PAGE_SPEED_DIALS,UI_SCREEN_SPEEDDIALS,page_speeddial_build,page_speeddial_keymap,page_speeddial_activate,NULL,                ui_opts_speeddial,    NULL },
     { "heldpress",  PAGE_HELD_PRESS, UI_SCREEN_HELDPRESS,page_heldpress_build,page_heldpress_keymap,page_heldpress_activate,NULL,               ui_opts_heldpress,    NULL },

@@ -269,7 +269,7 @@ int main(int argc, char **argv)
     int tap_x = 0, tap_y = 0;        /* a point touch (panel px)          */
     int hold_ms = 0;                /* how long --key presses stay down */
     const char *menu_style = NULL;   /* "carousel" | "grid"         */
-    const char *theme_name = NULL;    /* "dark" | "light"            */
+    const char *theme_name = NULL;    /* dark|light|amber|slate|mono  */
     const char *font_cycle = NULL;    /* "header|text|subtext[:N]"   */
     const char *data_path = NULL;     /* explicit chat source file   */
     const char *geom = NULL;          /* "WxH" panel geometry          */
@@ -445,8 +445,20 @@ int main(int argc, char **argv)
      * ui_shell_init() (before pages are built), and the font ladder is
      * advanced here — also before the UI exists, so no restyle is needed. */
     if (theme_name) {
-        ui_shell_set_startup_theme(!strcmp(theme_name, "light")
-                                    ? UI_THEME_LIGHT : UI_THEME_DARK);
+        static const struct { const char *name; int id; } themes[] = {
+            { "dark",  UI_THEME_DARK },  { "light",  UI_THEME_LIGHT },
+            { "amber", UI_THEME_AMBER }, { "slate",  UI_THEME_SLATE },
+            { "mono",  UI_THEME_MONO },
+        };
+        int t = -1;
+        for (size_t i = 0; i < sizeof themes / sizeof themes[0]; i++) {
+            if (!strcmp(theme_name, themes[i].name)) { t = themes[i].id; break; }
+        }
+        if (t < 0) {
+            fprintf(stderr, "[main] bad --theme '%s'\n", theme_name);
+            return 2;
+        }
+        ui_shell_set_startup_theme(t);
     }
     if (font_cycle) {
         int n = 1;

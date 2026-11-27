@@ -36,11 +36,18 @@ static const opt_entry_t opts_menu[] = {
     { "Settings", I_ELLIPSIS, OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 
-/* Display page: the three font roles are one level deeper; the menu's
- * SETTINGS category is one back. */
+/* Display page: the Theme submenu and the three font roles are one level
+ * deeper; the menu's SETTINGS category is one back. */
 static const opt_entry_t opts_display[] = {
+    { "Themes",     I_PALETTE,   OPT_ACTION_PAGE, PAGE_THEME },
     { "Font Roles", I_TH,        OPT_ACTION_PAGE, PAGE_FONT },
     { "Settings",   I_GEAR,      OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
+};
+
+/* Theme page: back to Display; the menu's SETTINGS category is one back. */
+static const opt_entry_t opts_theme[] = {
+    { "Display",  I_PALETTE, OPT_ACTION_PAGE, PAGE_DISPLAY },
+    { "Settings", I_GEAR,    OPT_ACTION_SETTINGS_CAT, PAGE_NONE },
 };
 static const opt_entry_t opts_font[] = {
     { "Display",  I_TH,   OPT_ACTION_PAGE, PAGE_DISPLAY },
@@ -76,7 +83,8 @@ static const opt_entry_t opts_stub[] = {
 const opt_entry_t *ui_opts_home(int *n)      { *n = 3; return opts_home; }
 const opt_entry_t *ui_opts_chatlist(int *n)  { *n = 3; return opts_messaging; }
 const opt_entry_t *ui_opts_menu(int *n)      { *n = 1; return opts_menu; }
-const opt_entry_t *ui_opts_display(int *n)   { *n = 2; return opts_display; }
+const opt_entry_t *ui_opts_display(int *n)   { *n = 3; return opts_display; }
+const opt_entry_t *ui_opts_theme(int *n)     { *n = 2; return opts_theme; }
 const opt_entry_t *ui_opts_font(int *n)      { *n = 2; return opts_font; }
 const opt_entry_t *ui_opts_speeddial(int *n) { *n = 1; return opts_speeddial; }
 const opt_entry_t *ui_opts_heldpress(int *n) { *n = 1; return opts_heldpress; }

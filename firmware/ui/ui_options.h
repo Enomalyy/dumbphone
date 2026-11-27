@@ -46,6 +46,7 @@ const opt_entry_t *ui_opts_home(int *n);
 const opt_entry_t *ui_opts_chatlist(int *n);
 const opt_entry_t *ui_opts_menu(int *n);
 const opt_entry_t *ui_opts_display(int *n);
+const opt_entry_t *ui_opts_theme(int *n);
 const opt_entry_t *ui_opts_font(int *n);
 const opt_entry_t *ui_opts_speeddial(int *n);
 const opt_entry_t *ui_opts_heldpress(int *n);

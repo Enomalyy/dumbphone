@@ -34,6 +34,7 @@ typedef enum {
     UI_SCREEN_CHATLIST,      /* Messaging: WhatsApp-style chat list          */
     UI_SCREEN_MENU,          /* main-menu category carousel (concept gen-09/03) */
     UI_SCREEN_DISPLAY,       /* SETTINGS category: theme/font/menu/bar (spec §14) */
+    UI_SCREEN_THEME,         /* Settings > Display > Theme: the named palettes */
     UI_SCREEN_FONT,          /* Settings > Display > Font: headers/text/subtext */
     UI_SCREEN_SPEEDDIALS,    /* speed-dial config sub-page (T9 1..9 names)       */
     UI_SCREEN_HELDPRESS,     /* held-press key config sub-page (spec §2)         */
