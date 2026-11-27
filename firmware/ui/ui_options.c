@@ -4,8 +4,7 @@
  * Pages are data (spec §4): each page owns a small const table of
  * opt_entry_t rows, exposed through one accessor per page. Every listed
  * option is an action that WORKS in the current UI state — opening a real
- * page, or switching the main-menu view (the two renderings of the same
- * menu_t data). Nothing here is inert: the sidebar shows only options
+ * page. Nothing here is inert: the sidebar shows only options
  * relevant to the page it overlays. The page registry (ui_shell.c) wires
  * each page's `options` field to its accessor (spec §16.3).
  */
@@ -29,12 +28,11 @@ static const opt_entry_t opts_messaging[] = {
     { "Contacts",     I_USERS,    OPT_ACTION_PAGE, PAGE_CONTACTS },
 };
 
-/* Main menu: the view toggle (both options re-render the same data) and a
- * jump to the settings tree. */
+/* Main menu: a jump to the settings tree. The main-menu view is chosen
+ * by Settings/Display's one cycling Menu Style row (spec §14.3) — the
+ * sidebar no longer carries per-style entries. */
 static const opt_entry_t opts_menu[] = {
-    { "View: Carousel", I_TH,       OPT_ACTION_MENU_CAROUSEL, PAGE_NONE },
-    { "View: Grid",     I_GEAR,     OPT_ACTION_MENU_GRID,     PAGE_NONE },
-    { "Settings",       I_ELLIPSIS, OPT_ACTION_PAGE,          PAGE_SETTINGS },
+    { "Settings", I_ELLIPSIS, OPT_ACTION_PAGE, PAGE_SETTINGS },
 };
 
 /* Settings tree: its two config sub-pages. */
@@ -82,7 +80,7 @@ static const opt_entry_t opts_stub[] = {
  * state, not a page with actions. */
 const opt_entry_t *ui_opts_home(int *n)      { *n = 3; return opts_home; }
 const opt_entry_t *ui_opts_chatlist(int *n)  { *n = 3; return opts_messaging; }
-const opt_entry_t *ui_opts_menu(int *n)      { *n = 3; return opts_menu; }
+const opt_entry_t *ui_opts_menu(int *n)      { *n = 1; return opts_menu; }
 const opt_entry_t *ui_opts_settings(int *n)  { *n = 2; return opts_settings; }
 const opt_entry_t *ui_opts_display(int *n)   { *n = 2; return opts_display; }
 const opt_entry_t *ui_opts_font(int *n)      { *n = 2; return opts_font; }

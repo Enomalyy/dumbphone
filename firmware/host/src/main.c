@@ -181,7 +181,10 @@ typedef struct {
     int         n;   /* full presses of this key */
 } key_seq_t;
 
-static key_seq_t g_key_seq[4];
+/* 8 named keys: enough for any realistic scene (open a page, move,
+ * activate twice). A full array used to SILENTLY drop the extra --key
+ * args, which shipped scenes that landed one state short. */
+static key_seq_t g_key_seq[8];
 static int       g_key_seq_n = 0;
 
 /* Swipes to inject in shot mode: repeated --swipe builds a sequence so one
@@ -407,8 +410,14 @@ int main(int argc, char **argv)
     /* Deterministic menu view for shots: set before the UI thread starts so
      * build_main_menu() reads it. (pthread_create is the happens-before.) */
     if (menu_style) {
-        ui_settings_set_menu_style(!strcmp(menu_style, "grid")
-                                    ? MENU_STYLE_GRID : MENU_STYLE_CAROUSEL);
+        /* One of carousel | grid | moving (spec §14.3's three styles). */
+        uint8_t st = MENU_STYLE_CAROUSEL;
+        if (!strcmp(menu_style, "grid")) {
+            st = MENU_STYLE_GRID;
+        } else if (!strcmp(menu_style, "moving")) {
+            st = MENU_STYLE_MOVING;
+        }
+        ui_settings_set_menu_style(st);
     }
 
     /* Deterministic appearance for shots: the theme is applied inside

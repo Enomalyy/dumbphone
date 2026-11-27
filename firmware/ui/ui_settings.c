@@ -24,7 +24,7 @@
  *
  *   DISPLAY    Theme              DARK | LIGHT
  *              Font               -> HEADERS / TEXT / SUBTEXT
- *              Menu Style         CAROUSEL | GRID
+ *              Menu Style         CAROUSEL | GRID | MOVING
  *              Softkey bar        SHOWN | HIDDEN
  *
  *   FONT       Headers            "<FACE> <px>", CENTER = next ladder entry
@@ -45,7 +45,9 @@
 /* Display strings. Row metas must fit the measured value column; the face
  * names are short on purpose (see ui_face_short) because "SILKSCREEN 24"
  * does not fit 104 px and truncating it would defeat the point. */
-static const char *const g_menu_style_vals[] = { "CAROUSEL", "GRID" };
+/* One cycling control (spec §14.3): Grid → Carousel → Moving carousel.
+ * The ring is the same in any order; values follow the enum. */
+static const char *const g_menu_style_vals[] = { "CAROUSEL", "GRID", "MOVING" };
 static const char *const g_call_pref_vals[]  = { "WHATSAPP", "STANDARD" };
 
 /* In-memory state (no persistence yet). */
@@ -223,7 +225,7 @@ ui_setting_effect_t ui_settings_display_activate(uint8_t sel)
     case DISPLAY_FONT:
         return UI_SETTING_EFFECT_NONE;   /* navigable row */
     case DISPLAY_MENU_STYLE:
-        g_menu_style ^= 1;
+        g_menu_style = (uint8_t)((g_menu_style + 1) % 3);
         ui_settings_set_menu_style(g_menu_style);
         effect = UI_SETTING_EFFECT_MENU_STYLE;
         break;
@@ -255,5 +257,6 @@ uint8_t ui_settings_menu_style(void) { return g_menu_style; }
 
 void ui_settings_set_menu_style(uint8_t style)
 {
-    g_menu_style = style ? MENU_STYLE_GRID : MENU_STYLE_CAROUSEL;
+    g_menu_style = (style == MENU_STYLE_GRID || style == MENU_STYLE_MOVING)
+                       ? style : MENU_STYLE_CAROUSEL;
 }

@@ -58,6 +58,7 @@ typedef enum {
 /* Two-state values (row `meta` shows the matching display string). */
 #define MENU_STYLE_CAROUSEL 0
 #define MENU_STYLE_GRID     1
+#define MENU_STYLE_MOVING   2   /* §14.2: sliding category strip        */
 #define CALL_PREF_WHATSAPP  0
 #define CALL_PREF_STANDARD  1
 
@@ -74,7 +75,8 @@ ui_setting_effect_t ui_settings_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_display_activate(uint8_t sel);
 ui_setting_effect_t ui_settings_font_activate(uint8_t sel);
 
-/* Current menu style (MENU_STYLE_CAROUSEL / MENU_STYLE_GRID). The grid
+/* Current menu style (CAROUSEL / GRID / MOVING — one cycling control,
+ * spec §14.3). The grid
  * renderer reads this to decide which main-menu view to draw. */
 uint8_t ui_settings_menu_style(void);
 

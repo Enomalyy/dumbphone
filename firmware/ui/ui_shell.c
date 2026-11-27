@@ -968,14 +968,6 @@ static void sidebar_execute(int idx)
     case OPT_ACTION_PAGE:
         open_page(o->target);      /* push_screen() closes the sidebar */
         return;                    /* navigation already closed it     */
-    case OPT_ACTION_MENU_CAROUSEL:
-        ui_settings_set_menu_style(MENU_STYLE_CAROUSEL);
-        ui_mainmenu_sync_layout();
-        break;
-    case OPT_ACTION_MENU_GRID:
-        ui_settings_set_menu_style(MENU_STYLE_GRID);
-        ui_mainmenu_sync_layout();
-        break;
     case OPT_ACTION_MAIN_MENU:
         push_screen(UI_SCREEN_MENU);   /* closes the sidebar */
         return;

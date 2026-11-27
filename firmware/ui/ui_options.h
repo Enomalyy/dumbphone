@@ -25,8 +25,6 @@ extern "C" {
 /* What executing an option does. */
 typedef enum {
     OPT_ACTION_PAGE = 0,       /* open `target` (a page_id_t)         */
-    OPT_ACTION_MENU_CAROUSEL,  /* main menu -> carousel view          */
-    OPT_ACTION_MENU_GRID,      /* main menu -> grid view              */
     OPT_ACTION_MAIN_MENU,      /* go to the main menu                 */
 } opt_action_t;
 
