@@ -91,6 +91,10 @@ extern "C" {
 #define UI_TRAY_Y           2   /* icon tray row                        */
 #define UI_TRAY_CELL_W     28
 #define UI_TRAY_CELL_H     26
+/* §14.5: the highlighted tray cell sits slightly larger than its
+ * neighbours — same centre point, bigger box, bigger icon face. */
+#define UI_TRAY_CELL_HI_W  34
+#define UI_TRAY_CELL_HI_H  30
 #define UI_TITLE_Y         28   /* centered category title row          */
 #define UI_ROWS_Y          54   /* rows start (page HAS a strip)        */
 
@@ -130,6 +134,7 @@ extern "C" {
 #define UI_FONT_BODY_L_PX    24   /* VT323: primary list text           */
 #define UI_FONT_BODY_M_PX    16   /* Pixelify Sans 8bpp: preview/second.*/
 #define UI_FONT_ICON_PX      22   /* Font Awesome: icons                */
+#define UI_FONT_ICON_L_PX    26   /* §14.5: highlighted tray icon       */
 #define UI_FONT_ICON_S_PX    13   /* Font Awesome: carets/chevrons      */
 
 /* Fallback faces for every text size (ui_text.h decides direction; the
@@ -264,6 +269,7 @@ lv_font_t *ui_font_title(void);     /* HEADER role   — page titles           *
 lv_font_t *ui_font_body_l(void);    /* TEXT role     — primary list text     */
 lv_font_t *ui_font_body_m(void);    /* SUBTEXT role  — previews/second line  */
 lv_font_t *ui_font_icon(void);      /* Font Awesome solid 22                 */
+lv_font_t *ui_font_icon_l(void);    /* Font Awesome solid 26 (§14.5 hi cell) */
 lv_font_t *ui_font_icon_s(void);    /* Font Awesome solid 13 (carets)        */
 
 #ifdef __cplusplus

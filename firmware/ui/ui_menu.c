@@ -246,12 +246,65 @@ static void on_cell_tap(lv_event_t *e)
     if (p->cat_cb) p->cat_cb(p, idx);
 }
 
+/* §14.5: size + position ONE tray cell. The highlighted cell sits slightly
+ * larger than its neighbours — same centre point, bigger box, bigger icon
+ * face (tokens in ui_theme.h). layout_strip() is the only caller: nothing
+ * else moves a cell, so the hi sizing can never drift from the geometry. */
+static void place_cell(list_page_t *p, int idx, int cx)
+{
+    menu_t *m = p->m;
+    bool sel = (idx == m->cat_sel);
+    int w = sel ? UI_TRAY_CELL_HI_W : UI_TRAY_CELL_W;
+    int h = sel ? UI_TRAY_CELL_HI_H : UI_TRAY_CELL_H;
+    lv_obj_set_size(p->cells[idx], w, h);
+    /* Centred on the NORMAL cell's centre: a taller hi box grows up and
+     * down equally, so its neighbours never shift. */
+    int y = TRAY_Y + (UI_TRAY_CELL_H - h) / 2;
+    if (y < 0) {
+        y = 0;
+    }
+    lv_obj_set_pos(p->cells[idx], cx - w / 2, y);
+
+    lv_obj_t *ic = p->cell_icon[idx];
+    if (sel) {
+        /* The bigger face, centred in the bigger box. */
+        lv_font_t *f = ui_font_icon_l();
+        lv_obj_set_style_text_font(ic, f, 0);
+        int ih = (int)lv_font_get_line_height(f);
+        lv_obj_set_width(ic, w - 4);
+        lv_obj_set_pos(ic, 2, ih > h ? 0 : (h - ih) / 2);
+        lv_obj_set_style_text_align(ic, LV_TEXT_ALIGN_CENTER, 0);
+    } else {
+        /* The shipped look: 22 px face at its original spot. */
+        lv_obj_set_style_text_font(ic, ui_font_icon(), 0);
+        lv_obj_set_width(ic, 20);
+        lv_obj_set_pos(ic, 4, 1);
+        lv_obj_set_style_text_align(ic, LV_TEXT_ALIGN_LEFT, 0);
+    }
+}
+
+/* The ONE source of tray-cell geometry: §14.5 sizing plus the cell's x —
+ * even columns across the width (the shipped layout). */
+static void layout_strip(list_page_t *p)
+{
+    menu_t *m = p->m;
+    if (!m || !m->cats || m->n_cats == 0) {
+        return;
+    }
+    int n = m->n_cats;
+    int cell_w = PANEL_W / n;
+    for (int i = 0; i < n; i++) {
+        place_cell(p, i, cell_w * i + cell_w / 2);
+    }
+}
+
 static void style_cell(list_page_t *p, int idx)
 {
     menu_t *m = p->m;
     bool sel = (idx == m->cat_sel);
 
-    /* Active category: accent border box + accent icon (picture 7). */
+    /* Active category: accent border box + accent icon (picture 7). The
+     * hi sizing of the active cell is layout_strip()'s job (§14.5). */
     lv_obj_set_style_border_color(p->cells[idx], sel ? C_ACCENT : C_BORDER, 0);
     lv_obj_set_style_text_color(p->cell_icon[idx], sel ? C_ACCENT : C_TEXT_DIM, 0);
 }
@@ -560,15 +613,12 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
 
     if (m->cats && m->n_cats > 0) {
         const int n = m->n_cats;
-        const int cell_w = PANEL_W / n;   /* even columns across the width */
 
-        /* --- icon tray: one icon per category, active highlighted --- */
+        /* --- icon tray: one icon per category, active highlighted ---
+         * (geometry comes from layout_strip() below, §14.5/§14.2) */
         for (int i = 0; i < n; i++) {
-            int cx = cell_w * i + cell_w / 2;
             lv_obj_t *box = lv_obj_create(p->root);
             p->cells[i] = box;
-            lv_obj_set_size(box, UI_TRAY_CELL_W, UI_TRAY_CELL_H);
-            lv_obj_set_pos(box, cx - UI_TRAY_CELL_W / 2, TRAY_Y);
             lv_obj_remove_flag(box, LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_add_event_cb(box, on_cell_tap, LV_EVENT_RELEASED, p);
             lv_obj_set_style_bg_color(box, C_GROUND, 0);
@@ -587,6 +637,9 @@ list_page_t *ui_list_build(lv_obj_t *parent, menu_t *m)
         p->title_lbl = mk_center_label(p->root, m->cats[m->cat_sel].label,
                                        ui_font_title(), C_TEXT, TITLE_Y);
 
+        /* Size + position every cell (the selected one hi-sized, §14.5),
+         * then paint the accent on the active one. */
+        layout_strip(p);
         for (int i = 0; i < n; i++) {
             style_cell(p, i);
         }
@@ -632,6 +685,7 @@ void ui_list_set_category(list_page_t *p, uint8_t cat)
     for (int i = 0; i < m->n_cats; i++) {
         style_cell(p, i);
     }
+    layout_strip(p);
     if (p->title_lbl) {
         lv_label_set_text(p->title_lbl, m->cats[cat].label);
     }

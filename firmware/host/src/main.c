@@ -263,6 +263,7 @@ int main(int argc, char **argv)
     int cycle_n = 0;                /* how many presses to inject  */
     const char *key_name = NULL;     /* a named HAL key (bezel ids) */
     int activate_n = 0;             /* full CENTER presses to inject */
+    int per_key_settle = 12;        /* frames after each injected key  */
     const char *swipe_dir = NULL;    /* "up" | "down" | "left" | "right" */
     int tap_x = 0, tap_y = 0;        /* a point touch (panel px)          */
     int hold_ms = 0;                /* how long --key presses stay down */
@@ -309,6 +310,15 @@ int main(int argc, char **argv)
             }
         } else if (!strcmp(argv[i], "--activate") && i + 1 < argc) {
             activate_n = atoi(argv[++i]);
+        } else if (!strcmp(argv[i], "--settle") && i + 1 < argc) {
+            /* Frames to pump after each injected key/cycle. The default
+             * (12) predates animation: scenes that must land past a
+             * moving-carousel slide pass --settle 30, and the mid-slide
+             * scene passes --settle 8 to freeze inside the settle window. */
+            per_key_settle = atoi(argv[++i]);
+            if (per_key_settle < 1) {
+                per_key_settle = 1;
+            }
         } else if (!strcmp(argv[i], "--swipe") && i + 1 < argc) {
             swipe_dir = argv[++i];
             int dist = 120;
@@ -358,7 +368,7 @@ int main(int argc, char **argv)
                     "[--press <button-id>] [--cycle left|right N] "
                     "[--key <name> [N] ...] [--activate N] "
                     "[--swipe up|down|left|right [dist] ...] [--tap x y ...] "
-                    "[--hold <ms>] "
+                    "[--hold <ms>] [--settle N] "
                     "[--menu-style carousel|grid] "
                     "[--geom WxH] [--scale N] [--frames N] "
                     "[--no-server] [--server-bind IP] [--server-port N] "
@@ -511,7 +521,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < cycle_n; i++) {
                 hal_input_inject_key(k, true);
                 hal_input_inject_key(k, false);
-                settle(12);
+                settle(per_key_settle);
             }
         }
         if (activate_n > 0) {
@@ -520,7 +530,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < activate_n; i++) {
                 hal_input_inject_key(HAL_KEY_OK, true);
                 hal_input_inject_key(HAL_KEY_OK, false);
-                settle(12);
+                settle(per_key_settle);
             }
         }
         for (int ks = 0; ks < g_key_seq_n; ks++) {
@@ -541,7 +551,7 @@ int main(int argc, char **argv)
                     sleep_ms(hold_ms);   /* a long press: held >= LONG_PRESS_MS */
                 }
                 hal_input_inject_key(k, false);
-                settle(12);
+                settle(per_key_settle);
             }
         }
         for (int sw = 0; sw < g_swipe_seq_n; sw++) {

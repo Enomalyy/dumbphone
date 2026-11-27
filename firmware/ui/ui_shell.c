@@ -94,6 +94,7 @@ static lv_font_t *f_body_m;    /* SUBTEXT role — preview / secondary     */
  * only `fallback` is written on it; bitmap/dsc tables stay shared. */
 static lv_font_t body_m_copy;
 static lv_font_t *f_icon;      /* Font Awesome solid                     */
+static lv_font_t *f_icon_l;    /* Font Awesome solid, large (§14.5 hi)   */
 static lv_font_t *f_icon_s;    /* Font Awesome solid, small (carets)     */
 
 /* The clock seed a frozen (harness) run shows. One definition, used by the
@@ -1321,6 +1322,7 @@ static lv_font_t *softkey_face(void)
 }
 
 lv_font_t *ui_font_icon(void)     { return f_icon; }
+lv_font_t *ui_font_icon_l(void)   { return f_icon_l; }
 lv_font_t *ui_font_icon_s(void)   { return f_icon_s; }
 
 int ui_shell_init(void)
@@ -1376,6 +1378,7 @@ int ui_shell_init(void)
     f_chrome   = load_font("Silkscreen-Regular.ttf", UI_FONT_CHROME_PX, &lv_font_montserrat_14);
     f_chrome_s = load_font("Silkscreen-Regular.ttf", UI_FONT_CHROME_S_PX, &lv_font_montserrat_12);
     f_icon     = load_font("FA-Solid.ttf", UI_FONT_ICON_PX, &lv_font_montserrat_16);
+    f_icon_l   = load_font("FA-Solid.ttf", UI_FONT_ICON_L_PX, &lv_font_montserrat_20);
     f_icon_s   = load_font("FA-Solid.ttf", UI_FONT_ICON_S_PX, &lv_font_montserrat_12);
 
     /* The three adjustable roles (HEADER / TEXT / SUBTEXT) come from the
@@ -1397,6 +1400,7 @@ int ui_shell_init(void)
     chain_fallbacks(f_chrome,   &lv_font_montserrat_14, UI_FONT_CHROME_PX);
     chain_fallbacks(f_chrome_s, &lv_font_montserrat_12, UI_FONT_CHROME_S_PX);
     chain_fallbacks(f_icon,     &lv_font_montserrat_16, UI_FONT_ICON_PX);
+    chain_fallbacks(f_icon_l,   &lv_font_montserrat_20, UI_FONT_ICON_L_PX);
     chain_fallbacks(f_icon_s,   &lv_font_montserrat_12, UI_FONT_ICON_S_PX);
 
     /* Every colour/font change from here on goes through this one pass. */
