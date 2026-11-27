@@ -35,6 +35,7 @@
 #define OPT_MAX        UI_SIDEBAR_ROWS_MAX   /* more than any page's table */
 
 static lv_obj_t *scr_sidebar;
+static lv_obj_t *side_rows_box;  /* scrollable row area (spec §14.4) */
 static lv_obj_t *side_title;   /* the "OPTIONS" header label */
 static lv_obj_t *side_rows[OPT_MAX];
 static lv_obj_t *side_row_icon[OPT_MAX];
@@ -125,11 +126,24 @@ void ui_sidebar_build(lv_obj_t *parent)
     side_title = side_label(scr_sidebar, "OPTIONS", ui_font_chrome(), C_TEXT,
                             10, 8, 90);
 
+    /* The rows live in a scrollable box (spec §14.4) styled exactly like the
+     * list pages' rows box: transparent, borderless, no scrollbar. Rows are
+     * placed relative to it, so a table taller than the panel scrolls with
+     * the same feel as every other surface — today no page's table is that
+     * long, so it simply never scrolls. */
+    side_rows_box = lv_obj_create(scr_sidebar);
+    lv_obj_set_size(side_rows_box, SIDEBAR_W - 12,
+                    (lv_coord_t)(UI_CONTENT_H - SIDEBAR_ROWS_Y));
+    lv_obj_set_pos(side_rows_box, 6, SIDEBAR_ROWS_Y);
+    lv_obj_set_scrollbar_mode(side_rows_box, LV_SCROLLBAR_MODE_OFF);  /* flat */
+    lv_obj_set_style_bg_opa(side_rows_box, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(side_rows_box, 0, 0);
+
     for (int i = 0; i < OPT_MAX; i++) {
-        lv_obj_t *row = lv_obj_create(scr_sidebar);
+        lv_obj_t *row = lv_obj_create(side_rows_box);
         side_rows[i] = row;
         lv_obj_set_size(row, SIDEBAR_W - 12, SIDEBAR_ROW_H - 3);
-        lv_obj_set_pos(row, 6, SIDEBAR_ROWS_Y + i * SIDEBAR_ROW_H);
+        lv_obj_set_pos(row, 0, i * SIDEBAR_ROW_H);
         lv_obj_remove_flag(row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_radius(row, 0, 0);
         /* Execute on RELEASE (see on_side_row_tap): a drag that starts on a
@@ -171,6 +185,10 @@ void ui_sidebar_relayout(void)
 {
     if (scr_sidebar) {
         lv_obj_set_size(scr_sidebar, SIDEBAR_W, UI_CONTENT_H);
+        if (side_rows_box) {
+            lv_obj_set_size(side_rows_box, SIDEBAR_W - 12,
+                            (lv_coord_t)(UI_CONTENT_H - SIDEBAR_ROWS_Y));
+        }
     }
 }
 
@@ -238,6 +256,9 @@ void ui_sidebar_move(int step)
     g_side_sel = s;
     style_side_row(old_sel);
     style_side_row(g_side_sel);
+    /* Keep the selection inside the visible part of the row area (a no-op
+     * while every option fits — exactly like ui_menu.c's ensure_visible). */
+    lv_obj_scroll_to_view(side_rows[g_side_sel], LV_ANIM_OFF);
 }
 
 bool ui_sidebar_is_open(void)

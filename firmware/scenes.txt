@@ -62,6 +62,10 @@ lock-from-chat          panel --screen chat --key end 2
 callhist-from-menu      panel --screen menu --cycle right 1 --activate 1
 chat-hebrew             panel --screen chat --key down 8
 swipe-scroll            panel --screen chat --swipe up 120
+# §14.4: uniform drag scroll — the other long lists, each scrolled past its
+# first screen with the same recipe (same dead zone, same 1:1 feel).
+callhist-scroll         panel --screen callhist --swipe up 120
+contacts-scroll         panel --screen contacts --swipe up 120
 swipe-chat              panel --screen chat --swipe left 120
 swipe-menu              panel --screen menu --swipe left 120
 tap-row3                panel --screen chat --tap 160 217

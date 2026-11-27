@@ -343,8 +343,8 @@ work, R1–R5).
 **Status (27/11):** §14.9–§14.12 are built — one nine-role palette with DARK and LIGHT, a real
 apply pass, Settings → Display (Theme / Font / Menu Style / Softkey bar), and the font mechanism
 with three roles. `just check-colours` fails the build on any colour literal outside the palette
-tables. §14.1–§14.8 are Stage B and C and are not built. The typeface question is still open:
-the faces are selectable, and none has been declared the winner.
+tables. §14.1–§14.3 (Stage B) and §14.4 (Stage C) are built; §14.5–§14.8 remain. The typeface
+question is still open: the faces are selectable, and none has been declared the winner.
 
 Eliyahu's list, to be executed as ONE wave (relay legs), then audited as before. Ordering matters:
 §14.7 depends on nothing else, but §14.1–§14.6 all land in the renderer/shell, so they must be one
@@ -381,6 +381,19 @@ Vertical drag scrolls every scrollable page; horizontal drag cycles categories w
 exist; a drag never also selects the row it started on. Add a small amount of motion so the scroll
 feels connected to the finger. This is the one place where frame rate matters most: it must feel
 smooth at whatever the panel can do.
+
+**Status (27/11): BUILT.** Every scrollable surface is an LVGL scroll target under one shared
+drag dead zone — `UI_SCROLL_DEADZONE_PX` (10 px), set on the indev itself in `ui_input.c` so no
+widget can drift from it: the chat list, every long list page, the main menu (carousel and grid
+layouts), and the options sidebar's row area (`ui_sidebar.c`). A vertical drag scrolls 1:1 with
+the finger — that exact tracking *is* the motion §14.0 asks for; there is no separate scroll
+animation to block input on, and a fast flick may fling (LVGL's native throw), which never runs
+while the finger is down. A drag never selects or executes the row it started on (the
+`press_moved` rule in `ui_menu.c` / `ui_sidebar.c`). A horizontal drag cycles categories only
+where a page has them (the shell's `page_swipe`); elsewhere it does nothing. Scroll position is
+per-page and survives going back and returning; it resets to the top when a category changes
+(`ui_list_set_category`) — the deliberate "new list" case. Golden scenes: `swipe-scroll`,
+`callhist-scroll`, `contacts-scroll`.
 
 **14.5 Carousel icons grow when highlighted.**
 The selected icon in the carousel is drawn slightly larger than the others (a design token, not a

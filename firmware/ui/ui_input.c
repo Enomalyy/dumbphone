@@ -47,7 +47,15 @@ static void indev_read_cb(lv_indev_t *indev, lv_indev_data_t *d)
 void ui_input_attach_indev(void)
 {
     lv_indev_t *indev = lv_indev_create();
+    if (!indev) {
+        return;
+    }
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+    /* One shared drag dead zone for every scroll target (spec §14.4): a
+     * vertical drag must move UI_SCROLL_DEADZONE_PX before scrolling starts,
+     * on every page. Set here — on the indev itself — so no widget can
+     * drift from the contract. */
+    lv_indev_set_scroll_limit(indev, UI_SCROLL_DEADZONE_PX);
     lv_indev_set_read_cb(indev, indev_read_cb);
     /* Read faster than lv_timer_handler runs so drags stay responsive. */
     lv_timer_set_period(lv_indev_get_read_timer(indev), 10);

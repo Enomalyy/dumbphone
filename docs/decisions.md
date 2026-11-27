@@ -72,8 +72,6 @@ page happened to be built. Make it a contract:
   the top when a page is entered fresh — pick one and document it.
 - Verify with the touch harness (`--tap`/`--swipe`), one screenshot per page at the scrolled position.
 
----
-
 ## 15. STAGE 0 (alpha) — runtime resolution selector — DO THIS BEFORE §14
 
 Eli's call (26/11): the panel is not chosen yet. The UI must be *written* to render at a
@@ -122,3 +120,5 @@ choice a data point we can look at instead of a guess. It is also the cheapest p
 it: after §14 there will be far more layout code to unpick.
 
 ---
+
+## 16. Stage C — touch feel (27/11): the scroll contract and key-repeat rules

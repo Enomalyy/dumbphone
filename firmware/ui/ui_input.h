@@ -28,6 +28,12 @@ extern "C" {
 /* A swipe must move this far sideways to count (spec §1). */
 #define UI_SWIPE_MIN_PX 50
 
+/* Vertical drag must move this far before scrolling starts (spec §14.4):
+ * one shared dead zone for EVERY scroll target, so every page feels the
+ * same. Set on the indev itself, not per widget. Same value as the
+ * horizontal swipe threshold on purpose. */
+#define UI_SCROLL_DEADZONE_PX 10
+
 /* A completed key press: `key` was released after `held_ms`. */
 typedef void (*ui_input_key_cb)(hal_key_t key, uint32_t held_ms);
 
